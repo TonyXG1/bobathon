@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: regulatory-radar-db
+    environment:
+      POSTGRES_DB: regulatory_radar
+      POSTGRES_USER: radar_user
+      POSTGRES_PASSWORD: changeme
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U radar_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Extraction Service (Part 1) - ONLY THIS SERVICE
+  extraction-service:
+    build:
+      context: ./extraction_service
+      dockerfile: Dockerfile
+    container_name: extraction-service
+    ports:
+      - "8081:8081"
+    environment:
+      - DATABASE_URL=postgresql://radar_user:changeme@postgres:5432/regulatory_radar
+      - CELLAR_SPARQL_ENDPOINT=http://publications.europa.eu/webapi/rdf/sparql
+      - CELLAR_REST_BASE_URL=https://eur-lex.europa.eu/legal-content/EN/TXT/
+      - ECHA_API_BASE_URL=https://echa.europa.eu
+      - ECHA_CANDIDATE_LIST_URL=https://echa.europa.eu/candidate-list-table
+      - CELLAR_MAX_CONCURRENT=5
+      - ECHA_CACHE_TTL=86400
+      - HTTP_TIMEOUT=30
+      - LOG_LEVEL=INFO
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  default:
+    name: regulatory-radar-network
