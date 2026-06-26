@@ -13,9 +13,17 @@ dependencies = [
     "defusedxml>=0.7.1",
     "beautifulsoup4>=4.12.0",
     "lxml>=4.9.0",
-    "SPARQLWrapper>=2.0.0",
     "python-dotenv>=1.0.0",
-    "sqlalchemy>=2.0.0",
+]
+
+# Persistence uses the stdlib `sqlite3` driver; CELLAR SPARQL is queried over
+# plain httpx (Accept: application/sparql-results+json), so neither sqlalchemy
+# nor SPARQLWrapper is required at runtime.
+
+[project.optional-dependencies]
+test = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
 ]
 
 [build-system]

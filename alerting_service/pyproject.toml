@@ -10,10 +10,16 @@ dependencies = [
     "pydantic>=2.5.0",
     "pydantic-settings>=2.1.0",
     "twilio>=8.10.0",
+    "sendgrid>=6.0.0",
     "httpx>=0.25.0",
     "python-dotenv>=1.0.0",
-    "sqlalchemy>=2.0.0",
 ]
+
+# Simplified, stateless build: in-memory delivery log, no database.
+# Email is delivered via SendGrid (from a verified sender identity).
+
+[project.optional-dependencies]
+test = ["pytest>=7.4.0"]
 
 [build-system]
 requires = ["hatchling"]

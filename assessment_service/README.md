@@ -1,139 +1,92 @@
 # Assessment Service (Part 2)
 
-Matches requirements against the portfolio to identify compliance gaps.
+Matches the live regulatory requirements (Part 1 output) against the fixed
+partner portfolio and emits compliance gaps as `Finding[]`. **Simplified,
+stateless build:** pure-Python matching, no database.
 
-## Responsibilities
+## How it works
 
-- Load portfolio (partners.json) and taxonomy (taxonomy.json)
-- Index portfolio by category/substance/market for fast matching
-- Apply applicability predicate: market ∧ category ∧ substance ∧ attribute ∧ ¬exclusion
-- Detect gaps (obligation applies but not satisfied)
-- Emit Finding objects conforming to finding.schema.json
+1. Takes a list of `Requirement` objects — supplied directly in the request, or
+   fetched live from the extraction service (`GET /requirements`).
+2. Loads the fixed portfolio from `dataset/partners.json` (22 partners, 53 products).
+3. Runs a small set of **deterministic gap rules** (`engine.py`). Each rule
+   encodes one obligation's applicability predicate
+   (market ∧ category ∧ substance ∧ attribute ∧ ¬exclusion) and is tied to a
+   regulation family.
+4. Emits one `Finding` per (product × matched rule), citing the **live
+   `source_url`** from the requirement for that family (no source → no finding).
+
+The rules re-derive the 5 seeded ground-truth gaps and the analogous gaps
+elsewhere, while avoiding look-alikes (wrong market, absent substance,
+out-of-scope attribute). Current portfolio → **15 findings**.
 
 ## API Endpoints
 
-- `POST /assess` - Run assessment against portfolio
-- `GET /findings` - List all findings
-- `GET /findings/{id}` - Get specific finding
-- `GET /health` - Health check
+- `GET  /health`   — health check.
+- `POST /assess`   — assess. Body may carry `requirements` (a `Requirement[]`);
+  if omitted, the service fetches them live from the extraction service.
+- `GET  /findings` — run the full pipeline: fetch live requirements from the
+  extraction service, then assess.
 
 ## Key Files
 
-- `main.py` - FastAPI app and endpoints
-- `engine.py` - Scope matching and gap detection logic
-- `portfolio.py` - Portfolio loading and indexing
-- `config.py` - Settings
-- `database.py` - SQLite/Postgres connection
-
-## Technology Stack
-
-- **FastAPI** - Web framework
-- **Pydantic v2** - Data validation
-- **httpx** - HTTP client (for calling extraction service)
-- Pure Python logic for matching
+- `main.py` — FastAPI app and endpoints.
+- `engine.py` — deterministic gap rules + `Finding` construction (the matcher).
+- `portfolio.py` — load `partners.json`, EU-market expansion.
+- `config.py` — settings (`BaseSettings`).
 
 ## Running Locally
 
 ```bash
-cd assessment_service
-uv sync
-uv run uvicorn main:app --reload --port 8082
+# 1. Start the extraction service (Part 1) on 8081:
+cd ../extraction_service && ../.venv/Scripts/python -m uvicorn main:app --port 8081
+
+# 2. Start the assessment service (Part 2) on 8082:
+cd ../assessment_service && ../.venv/Scripts/python -m uvicorn main:app --port 8082
 ```
 
-Visit http://localhost:8082/docs for interactive API documentation.
-
-## Running with Docker
+Then the full pipeline is one call:
 
 ```bash
-docker build -t assessment-service .
-docker run -p 8082:8082 --env-file ../.env -v $(pwd)/../dataset:/app/dataset:ro assessment-service
+curl http://localhost:8082/findings
 ```
+
+Or assess requirements you already have, with no extraction service needed:
+
+```bash
+curl -X POST http://localhost:8082/assess \
+     -H "Content-Type: application/json" \
+     -d '{"requirements": [ ... Requirement[] ... ]}'
+```
+
+Interactive docs: http://localhost:8082/docs
 
 ## Testing
 
 ```bash
-uv run pytest
-uv run pytest --cov=. --cov-report=html
+../.venv/Scripts/python -m pytest tests       # 16 tests, offline (extraction mocked)
 ```
 
-## Environment Variables
+The engine tests run against the real `dataset/partners.json` and assert the 5
+seeded gaps are found and the documented look-alikes are not.
 
-Required:
-- `DATABASE_URL` - Database connection string
-- `EXTRACTION_SERVICE_URL` - URL of extraction service
+## Environment Variables (all optional)
 
-Optional:
-- `LOG_LEVEL` - Logging level (default: INFO)
+- `EXTRACTION_SERVICE_URL` — extraction service base URL (default `http://localhost:8081`)
+- `PARTNERS_PATH` — portfolio file (default `dataset/partners.json`)
+- `TWILIO_TEST_NUMBER` / `TWILIO_TEST_EMAIL` — OUR alert recipients (never a
+  portfolio contact)
+- `HTTP_TIMEOUT`, `LOG_LEVEL`
 
-## Core Logic: Applicability Predicate
+## Ground Truth (re-derived from the rules)
 
-An obligation applies to a product when **ALL** of these hold:
+| Partner | Product | Gap | Family |
+|---|---|---|---|
+| P006 FitTrack | PulseBand | PFAS/PFHxA coating | REACH |
+| P008 PlayBright | RoboPup / SingAlong | DEHP in toy + button-cell access | Toy Safety / GPSR |
+| P010 DisplayOne | Legacy CCFL Panel | mercury | RoHS |
+| P013 RideVolt | e-Scooter / eBike battery | missing battery passport | Battery |
+| P022 KidVision | LittleView | micro-USB charging port | RED |
 
-1. **Market** - Company sells where rule applies (`EU` = all 27 states)
-2. **Category** - Rule covers product category (or scope is `"all"`)
-3. **Substance** - If rule names substances, product actually contains one
-4. **Attributes** - Battery type/capacity, has_radio, connector, packaging, intended_use satisfy conditions
-5. **Exclusions** - Respect carve-outs (e.g., medical/industrial-only products)
-
-A **gap** = obligation applies AND not yet satisfied.
-
-## Watch for Look-Alikes (Common False Positives)
-
-- ❌ Right category, **WRONG market** (e.g., UK-only SKU vs EU rule)
-- ❌ Rule names substance product **does NOT contain**
-- ❌ **Attribute takes product OUT of scope** (e.g., portable battery vs LMT battery rule)
-- ❌ **Duplicate/correction entries** (corrects field points to another rule)
-
-## Implementation Guidelines
-
-1. **Keep matcher pure and deterministic**
-   - No side effects
-   - Same input → same output
-   - Easy to unit test
-
-2. **Index for performance**
-   ```python
-   portfolio_by_category = defaultdict(list)
-   for partner in partners:
-       for product in partner["products"]:
-           portfolio_by_category[product["category"]].append(product)
-   ```
-
-3. **De-duplicate rules**
-   - Skip rules where `corrects` points to another rule
-   - They add no new obligation
-
-4. **Every Finding MUST cite source_url**
-   - Copy from the Requirement
-   - This is non-negotiable
-
-5. **Emit one Finding per (product × applicable-unmet-requirement)**
-
-## Ground Truth Validation
-
-Test against the 5 seeded gaps in partners.json:
-
-- **P006 FitTrack** - PulseBand uses PFAS/PFHxA coating (REACH)
-- **P008 PlayBright** - RoboPup DEHP limit + SingAlong button-cell security (GPSR)
-- **P010 DisplayOne** - ProPanel mercury in CCFL (RoHS)
-- **P013 RideVolt** - e-Scooter missing battery passport (Battery Reg)
-- **P022 KidVision** - LittleView micro-USB + RED cybersecurity
-
-Your engine should independently re-derive these from live sources.
-
-## Troubleshooting
-
-**No findings generated:**
-- Check that requirements are in database
-- Verify portfolio loaded correctly
-- Check applicability logic (add debug logging)
-
-**False positives:**
-- Review look-alike checklist
-- Check market matching (EU expansion)
-- Verify substance presence in product
-- Check attribute conditions
-
-**Missing source_url:**
-- Ensure copying from Requirement
-- Validate Requirement has source_url
+Plus inferred gaps elsewhere (e.g. industrial batteries P003-B/P021-B, PFAS on
+the SkyScout drone P017-A).

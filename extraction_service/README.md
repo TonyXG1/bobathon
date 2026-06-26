@@ -1,123 +1,93 @@
 # Extraction Service (Part 1)
 
-Pulls current EU regulatory requirements from live sources and normalizes them to the Requirement schema.
+Pulls current EU regulatory requirements **live** from EUR-Lex / CELLAR and
+normalizes them to the `Requirement` schema. **Simplified, no-database build:**
+every request queries the live SPARQL endpoint and returns results directly — no
+persistence, no extraction job to trigger.
 
-## Responsibilities
+## How it works
 
-- Fetch from EUR-Lex/CELLAR (SPARQL, REST, RSS)
-- Fetch from ECHA (SVHC Candidate List)
-- Normalize to Requirement Pydantic model
-- Change detection (conditional GET, content hashing)
-- Provenance tracking (source_url, CELEX, timestamp)
+For each regulation on the watchlist (the ~11 key acts: RoHS, REACH, WEEE,
+Battery, PPWR, GPSR, RED, ESPR, Toy Safety, MDR, POPs) the service queries the
+CELLAR SPARQL endpoint for the act's English title and document date, then builds
+a `Requirement` whose `source_url` points at the real EUR-Lex document. Requests
+to the watchlist run concurrently (≤ 5 connections, to stay a polite client).
 
 ## API Endpoints
 
-- `GET /requirements` - List all requirements
-- `GET /requirements/{update_id}` - Get specific requirement
-- `POST /extract` - Trigger extraction job
-- `GET /health` - Health check
+- `GET /requirements` — live list of watchlist requirements.
+  Optional repeatable filter: `?family=battery&family=reach`.
+- `GET /requirements/{celex}` — one requirement by CELEX (e.g. `32023R1542`).
+- `GET /health` — health check.
 
 ## Key Files
 
-- `main.py` - FastAPI app and endpoints
-- `clients.py` - HTTP clients for CELLAR and ECHA
-- `normalize.py` - Raw data → Requirement transformation
-- `change.py` - Change detection logic
-- `config.py` - Settings (BaseSettings from pydantic-settings)
-- `database.py` - SQLite/Postgres connection
+- `main.py` — FastAPI app and endpoints (live, stateless).
+- `extractor.py` — the watchlist + concurrent live fetch (`fetch_requirements`).
+- `clients.py` — `CellarClient`: CELLAR SPARQL query + metadata lookup.
+- `normalize.py` — raw source data → `Requirement` (taxonomy mapping, provenance).
+- `config.py` — settings (`BaseSettings` from pydantic-settings).
 
 ## Technology Stack
 
-- **FastAPI** - Web framework
-- **Pydantic v2** - Data validation
-- **httpx** - HTTP client
-- **defusedxml** - Safe XML parsing
-- **BeautifulSoup + lxml** - HTML parsing
-- **SPARQLWrapper** - SPARQL queries
+- **FastAPI** — web framework
+- **Pydantic v2** — data validation (the `Requirement` contract)
+- **httpx** — HTTP client (SPARQL over plain HTTP)
 
 ## Running Locally
 
 ```bash
 cd extraction_service
-uv sync
-uv run uvicorn main:app --reload --port 8081
+# with uv:
+uv sync && uv run uvicorn main:app --reload --port 8081
+# or with a plain venv:
+python -m venv ../.venv && ../.venv/Scripts/python -m pip install -e .
+../.venv/Scripts/python -m uvicorn main:app --reload --port 8081
 ```
 
-Visit http://localhost:8081/docs for interactive API documentation.
+Visit http://localhost:8081/docs for interactive API documentation, then call
+`GET /requirements` to get live data. (First call takes ~8 s — it queries CELLAR.)
 
 ## Running with Docker
 
 ```bash
 docker build -t extraction-service .
-docker run -p 8081:8081 --env-file ../.env extraction-service
+docker run -p 8081:8081 extraction-service
 ```
 
 ## Testing
 
 ```bash
-uv run pytest
-uv run pytest --cov=. --cov-report=html
+# fast, offline (network mocked):
+uv run pytest -m "not integration"
+# live smoke test against the real CELLAR endpoint:
+uv run pytest -m integration
 ```
 
-## Environment Variables
+## Environment Variables (all optional)
 
-Required:
-- `DATABASE_URL` - Database connection string
-- `CELLAR_SPARQL_ENDPOINT` - CELLAR SPARQL endpoint URL
-- `CELLAR_REST_BASE_URL` - CELLAR REST API base URL
-- `ECHA_API_BASE_URL` - ECHA API base URL
-- `ECHA_CANDIDATE_LIST_URL` - ECHA Candidate List URL
-
-Optional:
-- `CELLAR_MAX_CONCURRENT` - Max concurrent SPARQL connections (default: 5)
-- `ECHA_CACHE_TTL` - ECHA cache TTL in seconds (default: 86400)
-- `HTTP_TIMEOUT` - HTTP request timeout in seconds (default: 30)
-- `LOG_LEVEL` - Logging level (default: INFO)
+- `CELLAR_SPARQL_ENDPOINT` — SPARQL endpoint (default: the public CELLAR endpoint)
+- `HTTP_TIMEOUT` — request timeout in seconds (default: 60)
+- `CONTACT_EMAIL` — used in the polite `User-Agent` (default: `contact@example.com`)
+- `LOG_LEVEL` — logging level (default: INFO)
 
 ## Security Notes
 
-- Always use `defusedxml` for XML parsing (never plain `xml.etree`)
-- Set explicit timeouts on all HTTP requests
-- Validate and sanitize all scraped content
-- Never log secrets or credentials
-- Use conditional GET to be a polite client
+- Explicit timeouts on every HTTP request.
+- Polite client: clear `User-Agent` with contact, ≤ 5 concurrent connections.
+- Never log secrets or credentials.
 
-## Development Guidelines
+## Provenance (mandatory)
 
-1. **Provenance is mandatory** - Every Requirement must have:
-   - `source_url` (the live portal URL)
-   - `access_timestamp` (when we fetched it)
-   - `celex` (for EUR-Lex documents)
-   - `consolidation_date` (which version)
-
-2. **Be a polite client**:
-   - Send clear User-Agent with contact
-   - Honor rate limits (< 5 concurrent SPARQL connections)
-   - Use conditional GET (If-None-Match, If-Modified-Since)
-   - Cache ECHA results for ~24 hours
-
-3. **Change detection**:
-   - Use content hashing to detect actual changes
-   - Track cursors for incremental fetching
-   - De-duplicate corrections (respect `corrects` field)
-
-4. **Normalize to taxonomy**:
-   - Map categories to `taxonomy.product_categories` keys
-   - Map substances to `taxonomy.substances` keys
-   - Map regulation families to `taxonomy.regulation_families` keys
+Every `Requirement` carries:
+- `source_url` — the live EUR-Lex document URL
+- `celex` — the CELEX id
+- `access_timestamp` — when it was fetched (UTC)
 
 ## Troubleshooting
 
-**SPARQL timeout:**
-- Reduce query size
-- Add LIMIT/OFFSET for pagination
-- Keep < 5 concurrent connections
+**Slow / timing out:** the EU SPARQL endpoint can be slow; raise `HTTP_TIMEOUT`.
+The watchlist is fetched concurrently, so a full `/requirements` call is ~8 s.
 
-**XML parsing errors:**
-- Verify you're using `defusedxml`, not plain `xml.etree`
-- Check XML is well-formed
-
-**ECHA rate limiting:**
-- Increase cache TTL
-- Add delays between requests
-- Check User-Agent is set
+**`502` from `/requirements`:** the live source returned nothing (network or
+endpoint outage). Retry; check connectivity to `publications.europa.eu`.
