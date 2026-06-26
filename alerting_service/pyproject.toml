@@ -1,0 +1,20 @@
+[project]
+name = "alerting-service"
+version = "0.1.0"
+description = "Alerting service - Dispatch alerts via SMS/WhatsApp/Email using Twilio"
+requires-python = ">=3.12"
+
+dependencies = [
+    "fastapi>=0.104.0",
+    "uvicorn[standard]>=0.24.0",
+    "pydantic>=2.5.0",
+    "pydantic-settings>=2.1.0",
+    "twilio>=8.10.0",
+    "httpx>=0.25.0",
+    "python-dotenv>=1.0.0",
+    "sqlalchemy>=2.0.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

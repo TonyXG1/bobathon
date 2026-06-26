@@ -1,0 +1,17 @@
+[project]
+name = "orchestrator"
+version = "0.1.0"
+description = "Orchestrator - Schedule and coordinate extraction → assessment → alerting pipeline"
+requires-python = ">=3.12"
+
+dependencies = [
+    "httpx>=0.25.0",
+    "pydantic>=2.5.0",
+    "pydantic-settings>=2.1.0",
+    "python-dotenv>=1.0.0",
+    "APScheduler>=3.10.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

@@ -1,0 +1,152 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://regulatory-radar.example.com/schemas/requirement.schema.json",
+  "title": "Requirement",
+  "description": "A regulatory requirement from a live source. Output of Part 1 (extraction service), input of Part 2 (assessment service).",
+  "type": "object",
+  "properties": {
+    "update_id": {
+      "type": "string",
+      "description": "Unique identifier for this requirement"
+    },
+    "published_date": {
+      "type": "string",
+      "format": "date",
+      "description": "When the requirement was published"
+    },
+    "source": {
+      "type": "string",
+      "description": "Source name (e.g., 'EUR-Lex', 'ECHA')"
+    },
+    "source_url": {
+      "type": "string",
+      "description": "Live portal URL where this requirement was read (MANDATORY)"
+    },
+    "celex": {
+      "type": ["string", "null"],
+      "description": "CELEX number (for EUR-Lex documents)"
+    },
+    "consolidation_date": {
+      "type": ["string", "null"],
+      "format": "date",
+      "description": "Consolidation date of the act"
+    },
+    "access_timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When we fetched this requirement (UTC)"
+    },
+    "regulation_family": {
+      "type": "string",
+      "enum": [
+        "rohs", "reach", "weee", "battery", "ppwr", "gpsr", "red", "espr",
+        "toy_safety", "mdr", "pops", "epr", "energy_label", "ecodesign",
+        "cbam", "f_gas", "eudr", "food_contact", "clp", "other"
+      ],
+      "description": "Regulation family (from taxonomy.json)"
+    },
+    "reference": {
+      "type": ["string", "null"],
+      "description": "Legal reference (article/annex)"
+    },
+    "title": {
+      "type": "string",
+      "description": "Human-readable title"
+    },
+    "summary": {
+      "type": ["string", "null"],
+      "description": "Brief summary"
+    },
+    "change_type": {
+      "type": "string",
+      "enum": ["new", "amendment", "correction"],
+      "description": "Type of change (new/amendment/correction)"
+    },
+    "effective_date": {
+      "type": ["string", "null"],
+      "format": "date",
+      "description": "When the requirement becomes effective"
+    },
+    "deadline_date": {
+      "type": ["string", "null"],
+      "format": "date",
+      "description": "Compliance deadline"
+    },
+    "severity": {
+      "type": "string",
+      "enum": ["low", "medium", "high"],
+      "description": "Severity level (low/medium/high)"
+    },
+    "action_required": {
+      "type": ["string", "null"],
+      "description": "What action is required to comply"
+    },
+    "scope": {
+      "type": "object",
+      "properties": {
+        "categories": {
+          "oneOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "led_lighting", "battery_pack", "emobility_battery", "toy_electronic",
+                  "medical_wearable", "networking", "drone", "smart_home", "audio_device",
+                  "display", "power_supply", "sensor", "controller", "charger", "cable",
+                  "adapter", "other_electronic"
+                ]
+              }
+            },
+            {
+              "type": "string",
+              "enum": ["all"]
+            }
+          ],
+          "description": "Product categories in scope, or 'all' for all categories"
+        },
+        "substances": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "lead", "cadmium", "mercury", "DEHP", "BPA", "decaBDE", "TBBPA",
+              "MCCP", "PFAS_PFHxA", "dioxane", "chromium_vi", "phthalates",
+              "flame_retardants"
+            ]
+          },
+          "description": "Substances named in the requirement (empty if none)"
+        },
+        "markets": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Markets where requirement applies (ISO country codes, 'EU' = all 27 states)"
+        },
+        "conditions": {
+          "type": "string",
+          "description": "Free-text conditions and carve-outs (e.g., 'LMT and industrial batteries only')"
+        }
+      },
+      "required": ["categories", "substances", "markets"],
+      "description": "Scope of the requirement"
+    },
+    "corrects": {
+      "type": ["string", "null"],
+      "description": "If present, the update_id this entry duplicates/corrects (for de-duplication)"
+    }
+  },
+  "required": [
+    "update_id",
+    "published_date",
+    "source",
+    "source_url",
+    "access_timestamp",
+    "regulation_family",
+    "title",
+    "change_type",
+    "severity",
+    "scope"
+  ]
+}

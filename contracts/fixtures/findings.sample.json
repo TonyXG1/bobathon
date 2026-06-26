@@ -1,0 +1,92 @@
+[
+  {
+    "company": "RideVolt GmbH",
+    "partner_id": "P013",
+    "product_id": "P013-A",
+    "product": "e-Scooter Pro",
+    "regulation": "EU Battery Regulation 2023/1542 — battery passport (Art. 77)",
+    "requirement": "LMT batteries must have digital passport accessible via QR code by 2027-02-18",
+    "source_url": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32023R1542",
+    "gap": "e-Scooter Pro uses LMT battery without digital passport system",
+    "deadline": "2027-02-18",
+    "severity": "high",
+    "recommended_action": "Implement battery passport system with QR code and data matrix containing battery information",
+    "alert": {
+      "channel": "email",
+      "to": "test@example.com",
+      "message": "URGENT: e-Scooter Pro (P013-A) non-compliant with EU Battery Regulation 2023/1542. LMT battery requires digital passport by 2027-02-18. Action: Implement battery passport system. Source: https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32023R1542"
+    }
+  },
+  {
+    "company": "FitTrack Solutions",
+    "partner_id": "P006",
+    "product_id": "P006-A",
+    "product": "PulseBand",
+    "regulation": "REACH Regulation (EC) 1907/2006 — PFAS/PFHxA restriction (Annex XVII Entry 68)",
+    "requirement": "Perfluorohexanoic acid (PFHxA) restricted in textile coatings by 2025-02-25",
+    "source_url": "https://echa.europa.eu/candidate-list-table/-/dislist/details/0b0236e1807e77a4",
+    "gap": "PulseBand strap uses PFAS/PFHxA coating which is now restricted",
+    "deadline": "2025-02-25",
+    "severity": "high",
+    "recommended_action": "Remove PFAS/PFHxA from textile coatings and replace with alternative water-resistant materials",
+    "alert": {
+      "channel": "sms",
+      "to": "+1234567890",
+      "message": "URGENT: PulseBand (P006-A) non-compliant with REACH PFAS restriction. Remove PFHxA coating by 2025-02-25. Source: https://echa.europa.eu/candidate-list-table"
+    }
+  },
+  {
+    "company": "DisplayOne Technologies",
+    "partner_id": "P010",
+    "product_id": "P010-B",
+    "product": "ProPanel 27",
+    "regulation": "RoHS Directive 2011/65/EU — Mercury restriction (Annex II)",
+    "requirement": "Mercury prohibited in display backlights (CCFL exemption expired)",
+    "source_url": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32011L0065",
+    "gap": "ProPanel 27 spare parts still use mercury-containing CCFL backlight",
+    "deadline": "2024-12-31",
+    "severity": "high",
+    "recommended_action": "Replace mercury-containing CCFL backlights with LED alternatives in all spare parts",
+    "alert": {
+      "channel": "email",
+      "to": "test@example.com",
+      "message": "URGENT: ProPanel 27 (P010-B) non-compliant with RoHS mercury restriction. CCFL exemption expired, replace with LED by 2024-12-31. Source: https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32011L0065"
+    }
+  },
+  {
+    "company": "PlayBright Toys",
+    "partner_id": "P008",
+    "product_id": "P008-B",
+    "product": "SingAlong Mic",
+    "regulation": "GPSR Regulation (EU) 2023/988 — Button cell battery security (Art. 5)",
+    "requirement": "Toys with button cell batteries must have child-resistant compartments by 2024-12-13",
+    "source_url": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32023R0988",
+    "gap": "SingAlong Mic button cell compartment not child-secured (opens with single action)",
+    "deadline": "2024-12-13",
+    "severity": "high",
+    "recommended_action": "Redesign battery compartment to require tool or two independent actions to open",
+    "alert": {
+      "channel": "whatsapp",
+      "to": "+1234567890",
+      "message": "URGENT: SingAlong Mic (P008-B) non-compliant with GPSR. Button cell compartment must be child-resistant by 2024-12-13. Redesign required. Source: https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32023R0988"
+    }
+  },
+  {
+    "company": "KidVision Electronics",
+    "partner_id": "P022",
+    "product_id": "P022-A",
+    "product": "LittleView Camera",
+    "regulation": "RED Directive 2014/53/EU — Common charging solution (Art. 3.3(g))",
+    "requirement": "Portable devices must use USB-C charging port (micro-USB prohibited) by 2024-12-28",
+    "source_url": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32014L0053",
+    "gap": "LittleView Camera still uses micro-USB charging port instead of USB-C",
+    "deadline": "2024-12-28",
+    "severity": "medium",
+    "recommended_action": "Replace micro-USB port with USB-C charging port in next hardware revision",
+    "alert": {
+      "channel": "email",
+      "to": "test@example.com",
+      "message": "LittleView Camera (P022-A) non-compliant with RED common charger rule. Replace micro-USB with USB-C by 2024-12-28. Source: https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32014L0053"
+    }
+  }
+]

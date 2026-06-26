@@ -1,0 +1,18 @@
+{
+  "company": "RideVolt Mobility",
+  "partner_id": "P013",
+  "product_id": "P013-A",
+  "product": "e-Scooter Pro",
+  "regulation": "EU Battery Regulation 2023/1542 — battery passport (Art. 77)",
+  "requirement": "All LMT batteries with capacity > 2 kWh must have a digital battery passport",
+  "source_url": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32023R1542",
+  "gap": "e-Scooter Pro uses an LMT battery (48V, 2.5 kWh) but currently ships without a battery passport system",
+  "deadline": "2027-02-18",
+  "severity": "high",
+  "recommended_action": "Implement digital battery passport with QR code linking to database containing manufacturing data, carbon footprint, and supply chain information per Annex XIII",
+  "alert": {
+    "channel": "email",
+    "to": "test@yourdomain.com",
+    "message": "URGENT: e-Scooter Pro (P013-A) requires battery passport by 2027-02-18. LMT battery (2.5 kWh) must have digital passport per EU Reg 2023/1542 Art. 77. Source: https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32023R1542"
+  }
+}

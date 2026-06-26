@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://regulatory-radar.example.com/schemas/finding.schema.json",
+  "title": "Finding",
+  "description": "A compliance gap: a product against a requirement. Output of Part 2 (assessment service), input of Parts 3 & 4 (alerting, dashboard).",
+  "type": "object",
+  "properties": {
+    "company": {
+      "type": "string",
+      "description": "Partner company name"
+    },
+    "partner_id": {
+      "type": "string",
+      "description": "Partner ID (e.g., 'P001')"
+    },
+    "product_id": {
+      "type": "string",
+      "description": "Product ID (e.g., 'P001-A')"
+    },
+    "product": {
+      "type": "string",
+      "description": "Product name"
+    },
+    "regulation": {
+      "type": "string",
+      "description": "Human-readable regulation + article (e.g., 'EU Battery Regulation 2023/1542 — battery passport (Art. 77)')"
+    },
+    "requirement": {
+      "type": "string",
+      "description": "What the rule requires, in one sentence"
+    },
+    "source_url": {
+      "type": "string",
+      "description": "Live source URL (MANDATORY - proves rule came from live source)"
+    },
+    "gap": {
+      "type": "string",
+      "description": "Why this product is non-compliant today"
+    },
+    "deadline": {
+      "type": "string",
+      "format": "date",
+      "description": "Compliance deadline"
+    },
+    "severity": {
+      "type": "string",
+      "enum": ["low", "medium", "high"],
+      "description": "Severity level (low/medium/high)"
+    },
+    "recommended_action": {
+      "type": "string",
+      "description": "The fix"
+    },
+    "alert": {
+      "type": "object",
+      "properties": {
+        "channel": {
+          "type": "string",
+          "enum": ["email", "sms", "whatsapp"],
+          "description": "Channel to send alert on (email/sms/whatsapp)"
+        },
+        "to": {
+          "type": "string",
+          "description": "Recipient (YOUR test number/email, NOT portfolio contact)"
+        },
+        "message": {
+          "type": "string",
+          "description": "Concise actionable message (< 300 chars for SMS)"
+        }
+      },
+      "required": ["channel", "to", "message"],
+      "description": "Alert details (channel, recipient, message)"
+    }
+  },
+  "required": [
+    "company",
+    "partner_id",
+    "product_id",
+    "product",
+    "regulation",
+    "requirement",
+    "source_url",
+    "gap",
+    "deadline",
+    "severity",
+    "recommended_action",
+    "alert"
+  ]
+}
