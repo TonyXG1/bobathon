@@ -57,8 +57,22 @@ class Settings(BaseSettings):
 
     # Upstream
     assessment_service_url: str = "http://localhost:8082"
+    extraction_service_url: str = "http://localhost:8081"
     http_timeout: float = 180.0
     log_level: str = "INFO"
+
+    # Default recipient for the /test-email and /refresh demo endpoints.
+    demo_recipient_email: str = "antonsttum@gmail.com"
+
+    # CORS — comma-separated frontend origins; "*" allows any origin (dev default).
+    cors_origins: str = "*"
+
+    @property
+    def cors_origin_list(self) -> list[str]:
+        raw = self.cors_origins.strip()
+        if raw in ("", "*"):
+            return ["*"]
+        return [o.strip() for o in raw.split(",") if o.strip()]
 
     @property
     def has_twilio_auth(self) -> bool:

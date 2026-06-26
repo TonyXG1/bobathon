@@ -42,6 +42,16 @@ class Settings(BaseSettings):
     contact_email: str = "contact@example.com"
     log_level: str = "INFO"
 
+    # CORS — comma-separated frontend origins; "*" allows any origin (dev default).
+    cors_origins: str = "*"
+
+    @property
+    def cors_origin_list(self) -> list[str]:
+        raw = self.cors_origins.strip()
+        if raw in ("", "*"):
+            return ["*"]
+        return [o.strip() for o in raw.split(",") if o.strip()]
+
     @property
     def user_agent(self) -> str:
         """Polite User-Agent with contact info (see SOURCES.md §7.1)."""

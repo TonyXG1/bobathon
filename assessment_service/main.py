@@ -18,6 +18,7 @@ import httpx
 from config import Settings, get_settings
 from engine import assess
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from portfolio import load_partners
 from pydantic import BaseModel
 
@@ -30,6 +31,16 @@ app = FastAPI(
     title="Regulatory Radar — Assessment Service",
     description="Match live regulatory requirements against the portfolio to find compliance gaps.",
     version="0.2.0",
+)
+
+# CORS — let the browser frontend call this API (origins from CORS_ORIGINS in .env).
+_cors_origins = get_settings().cors_origin_list
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins,
+    allow_credentials=_cors_origins != ["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 

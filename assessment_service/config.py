@@ -47,6 +47,16 @@ class Settings(BaseSettings):
 
     log_level: str = "INFO"
 
+    # CORS — comma-separated frontend origins; "*" allows any origin (dev default).
+    cors_origins: str = "*"
+
+    @property
+    def cors_origin_list(self) -> list[str]:
+        raw = self.cors_origins.strip()
+        if raw in ("", "*"):
+            return ["*"]
+        return [o.strip() for o in raw.split(",") if o.strip()]
+
 
 @lru_cache
 def get_settings() -> Settings:
