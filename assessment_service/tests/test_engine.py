@@ -134,7 +134,7 @@ def test_email_alert_targets_changed_partner(partners, all_requirements):
     # P010 DisplayOne's contact email was pointed at our test address.
     p010 = [f for f in findings if f.product_id == "P010-B"]
     assert p010 and p010[0].alert.channel == "email"
-    assert p010[0].alert.to == "antonssttum@gmail.com"
+    assert p010[0].alert.to == "antonsttum@gmail.com"
 
 
 def test_no_findings_for_family_without_a_requirement(partners):

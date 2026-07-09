@@ -64,7 +64,7 @@ Interactive docs: http://localhost:8082/docs
 ## Testing
 
 ```bash
-../.venv/Scripts/python -m pytest tests       # 16 tests, offline (extraction mocked)
+../.venv/Scripts/python -m pytest tests       # 17 tests, offline (extraction mocked)
 ```
 
 The engine tests run against the real `dataset/partners.json` and assert the 5
