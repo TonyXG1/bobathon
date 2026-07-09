@@ -1,16 +1,17 @@
-# AGENTS.md — Regulatory Radar
+# CLAUDE.MD — Regulatory Radar
 
-> **Persistent project context for IBM Bob.** Bob loads this file at the start of every
-> conversation (and BobShell reads it via `context.fileName`). Keep it current: re-run `/init`
-> after major structural changes, but preserve the hand-written sections below (problem, model,
-> data dictionary, rules, conventions) — Bob's auto-scan won't reconstruct them.
+> **Persistent project context for the coding agent** (Claude Code loads this file at the start of
+> every conversation). Keep it current after major structural changes, but preserve the
+> hand-written sections below (problem, model, data dictionary, rules, conventions) — an auto-scan
+> won't reconstruct them.
 >
-> **Project:** Regulatory Radar · IBM Bobathon (GenAI Builders Day, GDGoC TUM Campus Heilbronn)
-> · partner challenge by **EcoComply** · built with **IBM Bob** + **Twilio**.
+> **Project:** Regulatory Radar · started at the IBM Bobathon (GenAI Builders Day, GDGoC TUM
+> Campus Heilbronn) · partner challenge by **EcoComply** · alerts via **Twilio**. Development now
+> continues with **Claude Code** + the **OpenSpec** workflow (see §12).
 >
 > **Stack:** Python 3.12+ end to end. **FastAPI** services, **Pydantic v2** as the contract layer,
-> **Streamlit** dashboard, **uv** for env/deps, **ruff** for lint/format, **pytest** for tests.
-> Chosen for minimal boilerplate and fast hackathon iteration.
+> **uv** for env/deps, **ruff** for lint/format, **pytest** for tests.
+> Chosen for minimal boilerplate and fast iteration.
 
 ---
 
@@ -51,8 +52,10 @@ The agent must:
   live sources          to schema           vs. portfolio          Twilio dispatch
         |                                          |                      |
         +------------- Requirement[] -------------+                      |
-                                                   +----- Finding[] -----+----> dashboard (Part 4)
+                                                   +----- Finding[] -----+
 ```
+
+(The originally planned Part 4 dashboard was never built — there is no `dashboard/` directory.)
 
 Two contracts decouple every stage and are the **heart of the system**. In Python they live as
 **Pydantic models** in `contracts/models.py` — those models are the single source of truth for
@@ -90,110 +93,100 @@ A **gap** = an obligation that **applies** *and* is **not yet satisfied**.
   "toy"** under Toy Safety.
 - **Duplicates / corrections** — entries that `corrects` another rule add no new obligation; de-dup.
 
-### 2.3 Model routing (Bob)
+### 2.3 Agent workflow
 
-Bob auto-routes each task to the best underlying model (Anthropic Claude, IBM Granite, Mistral) by
-accuracy / latency / cost. **We do not pin a model.** Favour Plan/Ask modes for reasoning-heavy
-rule extraction and gap logic, Code/Agent for implementation.
+Favour plan-first exploration for reasoning-heavy rule extraction and gap logic, then implement.
+Non-trivial changes go through the OpenSpec flow (`/opsx:propose` → `/opsx:apply` →
+`/opsx:archive` — see §12).
 
 ---
 
-## 3. Architecture — four services + shared contracts
+## 3. Architecture — three services + shared contracts (stateless, no database)
 
-Each of the four parts is a **separate, independently runnable Python app** so the team can work in
-parallel. The three backend services are small **FastAPI** apps (Pydantic in, Pydantic out, auto
-OpenAPI docs at `/docs`); the dashboard is **Streamlit**. Services talk over REST (`httpx`); a
-shared **SQLite** file holds state and the audit trail (swap to Postgres via docker-compose if you
-prefer — not required for the demo).
+Each part is a **separate, independently runnable FastAPI app** (Pydantic in, Pydantic out, auto
+OpenAPI docs at `/docs`). Services talk over REST (`httpx`). **There is no database** — this is a
+simplified stateless build: every request works on live data, and the alerting service keeps its
+delivery log in memory for the session.
 
-| Service | Part | Stack | Port | Responsibility | Reads | Writes |
+| Service | Part | Stack | Port | Responsibility | Reads | Emits |
 |---|---|---|---|---|---|---|
-| `extraction_service` | 1 | FastAPI + httpx | 8081 | Pull + normalize current rules from CELLAR/ECHA; change-detection & provenance | live sources, `taxonomy.json` | `Requirement[]` (table `requirements`) |
-| `assessment_service` | 2 | FastAPI | 8082 | Scope-match rules against the portfolio; emit gaps | `requirements`, `dataset/partners.json`, `taxonomy.json` | `Finding[]` (table `findings`) |
-| `alerting_service` | 3 | FastAPI + twilio | 8083 | Dispatch one alert per gap on `preferred_channel` (to OUR test number); log delivery | `findings` | `alerts_log` |
-| `dashboard` | 4 | Streamlit | 8501 | Findings UI: sort by deadline/severity, link to source, show audit trail | the services' REST APIs | — |
-| `orchestrator` *(thin, optional)* | — | APScheduler / plain script | 8080 | Schedule + chain extraction → assessment → alerting | all services | — |
+| `extraction_service` | 1 | FastAPI + httpx | 8081 | Query the live CELLAR SPARQL endpoint for the ~11 watchlist acts; normalize with provenance | live CELLAR | `Requirement[]` (HTTP response) |
+| `assessment_service` | 2 | FastAPI | 8082 | Deterministic gap rules against the portfolio | extraction API, `dataset/partners.json` | `Finding[]` (HTTP response) |
+| `alerting_service` | 3 | FastAPI + twilio/sendgrid | 8083 | One alert per gap on `preferred_channel`; simulates when credentials missing | assessment API | deliveries + in-memory `ALERTS_LOG` |
+
+**Not implemented:** the Part-4 dashboard was never built, and `orchestrator/` is an empty stub
+(only a `pyproject.toml`, no code). The Docker/database scaffolding from the earlier
+database-backed design has been removed — use `run_all.ps1` to start everything.
 
 **Why separate services:** the two contracts are clean process boundaries. Once the Pydantic models
 (and their exported schemas) are frozen, each teammate builds and tests their service against
-fixtures (`contracts/fixtures/`) with no runtime dependency on the others. CI checks that the
-committed `*.schema.json` still matches `model_json_schema()` — instant drift detection.
-
-> Frontend note: the dashboard is Streamlit for speed (pure Python, no build step). If you'd rather
-> use React + Vite + TS, swap only `dashboard/` — nothing else changes, since it reads the same REST APIs.
-
-**Suggested ownership:** Part 1 (you) + orchestrator; Part 2 (teammate) is the cleanest parallel
-complement; Parts 3 and 4 are shared float — alerting is demo-critical, so don't let it slip.
+fixtures (`contracts/fixtures/`) with no runtime dependency on the others. Re-run
+`contracts/export_schemas.py` whenever a model changes so the committed `*.schema.json` stay in
+sync (there is no CI in this repo — the check is manual).
 
 ---
 
 ## 4. Repository structure
 
 ```
-regulatory-radar/
-├── AGENTS.md                       # this file — Bob reads it every session
-├── README.md                       # the challenge brief
+bobathon/
+├── CLAUDE.MD                       # this file — the agent reads it every session
+├── README.md                       # the challenge brief + quick start
 ├── SOURCES.md                      # where to get CURRENT rules (start here for Part 1)
-├── DATASET_README.md               # upstream data dictionary (mirrored in §5 below)
-├── .gitignore                      # excludes build_dataset.py (maintainer-only generator)
+├── DATASET_README.md               # data dictionary (mirrored in §5 below)
+├── run_all.ps1                     # start all three services in order (Windows)
 ├── pyproject.toml                  # uv workspace + shared dev deps (ruff, pytest)
-├── docker-compose.yml              # all services (+ optional Postgres) for a one-command demo
 ├── .env.example                    # template for secrets (never commit the real .env)
 │
-├── .bob/                           # IBM Bob config (generated by /init, version-controlled)
-│   ├── rules/                      # team-wide custom rules (loaded every conversation)
-│   ├── rules-code/                 # mode-specific rules (e.g. for Code mode)
-│   └── custom_modes.yaml           # optional per-part personas (see §12.2)
+├── .claude/                        # Claude Code config (OpenSpec commands + skills)
+│   ├── commands/opsx/              # /opsx:propose · apply · archive · explore · sync
+│   └── skills/openspec-*/          # the skills backing those commands
+├── openspec/                       # OpenSpec workspace (config.yaml; changes/ + specs/ appear on use)
 │
 ├── dataset/                        # FIXED inputs — DO NOT EDIT
 │   ├── partners.json               # the portfolio: 22 companies, 53 products
-│   ├── partners.csv                # same portfolio, flattened (1 row per product)
 │   ├── taxonomy.json               # controlled vocabulary (the authoritative enums)
-│   ├── regulatory_updates.json     # 50 EXAMPLE rules — shape only, NOT an answer key
-│   ├── sample_expected_output.json # the shape of one Finding (gap + source + alert)
-│   ├── dataset_stats.json          # summary counts
-│   └── feed/                       # 10 of the example rules rendered as HTML notices
+│   └── sample_expected_output.json # the shape of one Finding (gap + source + alert)
 │
 ├── contracts/                      # the SEAMS — single source of truth for both interfaces
 │   ├── models.py                   # Pydantic models: Requirement, Finding, Alert, enums
 │   ├── export_schemas.py           # dumps model_json_schema() -> the two .json files below
-│   ├── requirement.schema.json     # generated; CI fails if stale
-│   ├── finding.schema.json         # generated; CI fails if stale
+│   ├── requirement.schema.json     # generated — re-export after model changes
+│   ├── finding.schema.json         # generated — re-export after model changes
 │   └── fixtures/
 │       ├── requirements.sample.json
 │       └── findings.sample.json
 │
-├── extraction_service/             # PART 1 — FastAPI
-│   ├── main.py                     # app + GET /requirements
-│   ├── clients.py                  # cellar_client (Formex via httpx), echa_client (SVHC list)
+├── extraction_service/             # PART 1 — FastAPI :8081
+│   ├── main.py                     # GET /requirements · GET /requirements/{celex} · /health
+│   ├── extractor.py                # WATCHLIST (family→CELEX) + concurrent live fetch
+│   ├── clients.py                  # CellarClient: SPARQL metadata query over httpx
 │   ├── normalize.py                # raw source -> Requirement (owns the output contract)
-│   ├── change.py                   # conditional GET, cursors, content-hash dedup, provenance
-│   ├── tests/
+│   ├── config.py                   # pydantic-settings + sys.path bootstrap for contracts
+│   ├── tests/                      # 22 offline + 1 live integration test
 │   └── pyproject.toml
 │
-├── assessment_service/             # PART 2 — FastAPI
-│   ├── main.py                     # app + POST /assess · GET /findings
-│   ├── engine.py                   # scope matcher: market / category / substance / attribute
-│   ├── portfolio.py                # loads & indexes partners.json + taxonomy.json
-│   ├── tests/
+├── assessment_service/             # PART 2 — FastAPI :8082
+│   ├── main.py                     # POST /assess · GET /findings · /health
+│   ├── engine.py                   # 6 deterministic gap rules + Finding construction
+│   ├── portfolio.py                # loads partners.json, EU-market expansion
+│   ├── config.py
+│   ├── tests/                      # 17 offline tests (incl. seeded gaps + look-alikes)
 │   └── pyproject.toml
 │
-├── alerting_service/               # PART 3 — FastAPI + Twilio
-│   ├── main.py                     # app + POST /alerts
-│   ├── channels.py                 # sms / whatsapp / email routing by preferred_channel
+├── alerting_service/               # PART 3 — FastAPI :8083
+│   ├── main.py                     # POST /alerts · /dispatch · /refresh · /test-email · GET /alerts/log
+│   ├── channels.py                 # TwilioSender: sms/whatsapp/email + dry-run simulation
 │   ├── templates.py                # one concise actionable message per gap
-│   ├── tests/
+│   ├── config.py
+│   ├── tests/                      # 19 offline tests (Twilio never called)
 │   └── pyproject.toml
 │
-├── dashboard/                      # PART 4 — Streamlit
-│   └── app.py
-│
-└── orchestrator/                   # thin scheduler/glue (optional)
-    └── run.py                      # APScheduler job: extraction -> assessment -> alerting
+└── orchestrator/                   # STUB — pyproject.toml only, no code
 ```
 
-> The bundled `dataset/` files originate from a maintainer script and are intentionally synthetic.
-> `partners.json` is the portfolio we assess; everything else in `dataset/` is reference/illustration.
+> The bundled `dataset/` files are intentionally synthetic. `partners.json` is the portfolio we
+> assess; everything else in `dataset/` is reference/illustration.
 
 ---
 
@@ -261,58 +254,22 @@ from live sources). The seeded gaps are, in essence:
 > Most partners have **no** `compliance_status` on purpose — inferring their gaps from current
 > requirements is the actual challenge.
 
-### 5.2 `partners.csv` — flattened portfolio
-
-The same 22 companies / 53 products as **one row per product**, for spreadsheets. Multi-value
-columns are **pipe-delimited** (`|`): `sells_in`, `substances`, `packaging`, `markets`,
-`compliance_streams`. **Differences vs. JSON:** the CSV has **no** nested `compliance_status` and
-**no** `battery_chemistry` column (it keeps only `battery_type`). Treat `partners.json` as the
-source of truth; the CSV is convenience (easy to load with `pandas.read_csv`).
-
-Columns: `partner_id, company, hq_country, sells_in, contact_email, contact_phone,
-preferred_channel, product_id, product_name, category, intended_use, substances, has_battery,
-battery_type, battery_capacity_wh, has_radio, connector, packaging, markets, compliance_streams`.
-
-### 5.3 `taxonomy.json` — controlled vocabulary (authoritative enums)
+### 5.2 `taxonomy.json` — controlled vocabulary (authoritative enums)
 
 | Key | Contents |
 |---|---|
-| `product_categories` | 17 categories (e.g. `led_lighting`, `battery_pack`, `emobility_battery`, `toy_electronic`, `medical_wearable`, `networking`, `drone`…) with descriptions |
-| `substances` | 13 substances (e.g. `lead`, `cadmium`, `mercury`, `DEHP`, `BPA`, `decaBDE`, `TBBPA`, `MCCP`, `PFAS_PFHxA`, `dioxane`) with the regime each falls under |
-| `regulation_families` | 20 families mapping a short tag to the legal instrument — see 6.2 |
+| `product_categories` | 17 categories: `audio`, `battery_pack`, `camera`, `charging_equipment`, `computing`, `display`, `drone`, `emobility_battery`, `gaming`, `industrial_equipment`, `iot_sensor`, `led_lighting`, `medical_wearable`, `networking`, `smartphone`, `toy_electronic`, `wearable` |
+| `substances` | 13 substances: `lead`, `cadmium`, `mercury`, `chromium_vi`, `PBB`, `PBDE`, `DEHP`, `BPA`, `decaBDE`, `TBBPA`, `MCCP`, `PFAS_PFHxA`, `dioxane` |
+| `regulation_families` | 20 families: `rohs`, `reach`, `weee`, `battery`, `ppwr`, `gpsr`, `red`, `espr`, `toy_safety`, `mdr`, `pops`, `epr`, `epr_packaging`, `energy_label`, `emc`, `lvd`, `machinery`, `atex`, `chemical_safety`, `cybersecurity` |
 | `markets_note` | "ISO country codes; `EU` expands to all 27 member states." |
 
 When normalizing live-scraped rules into `Requirement`, **map categories/substances/families onto
-these keys** so the assessment engine can match deterministically. Load them as Python enums /
-`Literal` types in `contracts/models.py` for free validation.
+taxonomy keys** so the assessment engine can match deterministically. The `Literal` enums in
+`contracts/models.py` mirror `taxonomy.json` exactly (plus one extraction-side fallback family,
+`"other"`). If `taxonomy.json` ever changes, update the Literals and re-run `export_schemas.py`
+in the same change.
 
-### 5.4 `regulatory_updates.json` — EXAMPLE rules (shape only, NOT an answer key)
-
-`{ "updates": [ Update, … ] }` — **50 examples**. They exist to teach the **shape** of a rule and
-to show what **noise** looks like. **Do not match findings against this file.**
-
-| Field | Type | Meaning |
-|---|---|---|
-| `update_id` | str | `REG-26-NNN` |
-| `published_date` | date | When published |
-| `source` | str | e.g. `EUR-Lex`, `ECHA`, `National EPR registry (DE/FR)` |
-| `regulation_family` | enum | Key of `taxonomy.regulation_families` |
-| `reference` | str | Legal reference (article/annex) |
-| `title`, `summary` | str | Human description |
-| `change_type` | enum | `new` \| `amendment` \| `correction` |
-| `effective_date`, `deadline_date` | date | When it applies / the compliance deadline |
-| `severity` | enum | `low` \| `medium` \| `high` |
-| `action_required` | str | The fix |
-| `scope.categories` | list[str] \| `"all"` | Categories in scope |
-| `scope.substances` | list[str] | Substances named (empty if none) |
-| `scope.markets` | list[str] | Markets in scope |
-| `scope.conditions` | str | **Free-text carve-outs — often encodes the exclusion that creates look-alikes** |
-| `corrects` | str? | If present, the `update_id` this entry duplicates/corrects → **de-dup** |
-
-> The set deliberately mixes in **unrelated domains** (CBAM, F-gas, EUDR, food-contact, CLP — not
-> finished electronics) and **duplicate/correction** entries, so your pipeline learns to ignore noise.
-
-### 5.5 `sample_expected_output.json` — the Finding shape (output contract)
+### 5.3 `sample_expected_output.json` — the Finding shape (output contract)
 
 One example finding. **This is the structure every Part-2 output must conform to** (i.e. the
 `Finding` Pydantic model).
@@ -332,22 +289,15 @@ One example finding. **This is the structure every Part-2 output must conform to
 | `recommended_action` | str | The fix |
 | `alert` | obj | `{ channel, to, message }` — `channel` = the partner's `preferred_channel`; `to` = **YOUR Twilio test number**; `message` = concise actionable text incl. product, deadline, source |
 
-### 5.6 `dataset_stats.json` — summary counts
+### 5.4 Other repo docs
 
-`partners: 22 · products: 53 · companies_with_seeded_gaps: 5 · sample_feed_updates: 50 ·
-sample_noise: 6 · sample_duplicates: 6`.
+`README.md` (challenge brief + quick start), `DATASET_README.md` (data dictionary),
+`SOURCES.md` (live-sources guide), per-service `README.md`s (accurate for the current build).
 
-### 5.7 `feed/` — example rules as HTML notices
-
-10 of the `regulatory_updates.json` entries rendered as HTML pages (`index.html` plus
-`REG-26-*.html`), mimicking a real legislation-portal notice. Use them to develop and test your
-**HTML parsing path** (BeautifulSoup) before pointing it at the live web. Same content as the
-matching JSON entries; not additional rules.
-
-### 5.8 Other repo docs
-
-`README.md` (full challenge), `DATASET_README.md` (upstream field guide), `SOURCES.md` (live
-sources). `.gitignore` excludes `build_dataset.py` (the maintainer-only generator — not needed).
+> Removed in the 2026-07 cleanup: `partners.csv` (unused duplicate of `partners.json`),
+> `regulatory_updates.json` (empty placeholder), `dataset_stats.json`, and `feed/` (orphan sample
+> page). The `Requirement` model in `contracts/models.py` documents the rule shape they were
+> meant to illustrate.
 
 ---
 
@@ -355,6 +305,11 @@ sources). `.gitignore` excludes `build_dataset.py` (the maintainer-only generato
 
 The task is to pull **current** rules from real portals. Prefer structured, machine-readable access
 over scraping rendered HTML. Suggested Python libraries are noted per source.
+
+> **Implemented today:** the extraction service queries the **CELLAR SPARQL endpoint only** — one
+> metadata query (English title + document date) per watchlist CELEX, fetched concurrently (≤ 5
+> connections). Formex XML retrieval, ECHA scraping, RSS change detection, and conditional GET are
+> documented below as the intended next steps but are **not built**.
 
 ### 6.1 Access methods
 
@@ -424,16 +379,21 @@ timestamp. This is both the "cite the source" requirement and the auditability t
 - Use the official **`twilio`** Python SDK; credentials come from env (§10) — never hardcode. Promo
   code for hackathon credit: `TUM-TWILIO-50`. At least one **real** alert firing in the demo is the
   wow moment.
-- Log every send to `alerts_log` (who / channel / when / message / finding id).
+- Log every send to the in-memory `ALERTS_LOG` (who / channel / when / message / product id) —
+  exposed at `GET /alerts/log`.
+- **Dry-run safety net:** with incomplete credentials or `TEST_MODE=true`, sends are *simulated*
+  (`status: "simulated"` with the reason) so the pipeline demos end-to-end without a Twilio account.
+- Extra demo endpoints: `POST /test-email` (one verification email) and `POST /refresh`
+  (re-fetch laws → re-assess → email a summary, returning the fresh findings).
 
 ---
 
-## 9. Dashboard (Part 4)
+## 9. Dashboard (Part 4) — NOT BUILT
 
-**Streamlit** (`streamlit run dashboard/app.py`). Reads `Finding[]` (and the audit trail) from the
-services over `httpx`. Sort by deadline and severity; each row links to its `source_url` and shows
-the access date — the "auditable, would-EcoComply-use-it" angle the jury scores. Pure Python, no
-build step. (Swap to React + Vite + TS if preferred — it reads the same REST APIs.)
+There is no `dashboard/` directory. If one is added later, it should read the same REST APIs
+(`GET :8082/findings`, `GET :8083/alerts/log`), sort by deadline/severity, and link each row to its
+`source_url` — the "auditable, would-EcoComply-use-it" angle the jury scores. All three services
+already ship CORS middleware (`CORS_ORIGINS` env var) so a browser frontend can call them directly.
 
 ---
 
@@ -443,62 +403,61 @@ build step. (Swap to React + Vite + TS if preferred — it reads the same REST A
   (e.g. `defusedxml.ElementTree`), which blocks XXE / billion-laughs / external-entity attacks that
   plain `xml.etree` / `lxml` allow by default. If you must use `lxml`, set
   `etree.XMLParser(resolve_entities=False, no_network=True, dtd_validation=False)`.
-- **Secrets via env only.** Load with **`pydantic-settings`** (`BaseSettings`) or `python-dotenv`.
-  `.env` is **gitignored**; commit `.env.example`. Holds `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`,
-  `TWILIO_FROM_NUMBER`, IBM Bob keys, DB URL. Never log secrets.
+- **Secrets via env only.** Load with **`pydantic-settings`** (`BaseSettings`); `.env` is
+  **gitignored**, commit `.env.example`. Holds the Twilio/SendGrid credentials. Never log secrets.
 - **Treat all scraped content as untrusted** — defensive parsing, size limits, request timeouts on `httpx`.
 - **Be a polite client** — User-Agent with contact, honor `robots.txt`/rate limits, cache, use
   conditional GET (`If-None-Match` / `If-Modified-Since`) so most polls return `304`.
-- **Triage Bob's inline security findings** (Semgrep) before merging; don't dismiss them wholesale.
-- Portfolio data is synthetic and safe, but alerts must still go only to our own test endpoints.
+- Portfolio data is synthetic and safe, but SMS/WhatsApp alerts must still go only to our own
+  test endpoints.
 
 ---
 
 ## 11. Build, run, test
 
 - **Tooling:** **`uv`** for envs/deps (fast), **`ruff`** for lint+format, **`pytest`** for tests.
-- **Install:** from the repo root, `uv sync` (or per service: `cd <service> && uv sync`).
-- **Run a backend service:** `uv run uvicorn main:app --reload --port 8081` (from the service dir).
+- **Everything at once (Windows):** `.\run_all.ps1` — builds one shared `.venv`, installs all
+  service deps, starts the three services in dependency order gated on `/health`, logs to `logs/`.
+- **Run one service:** `uv run uvicorn main:app --reload --port 8081` (from the service dir).
   Repeat with 8082 / 8083 for assessment / alerting. OpenAPI docs at `http://localhost:<port>/docs`.
-- **Run the dashboard:** `uv run streamlit run dashboard/app.py` (serves on 8501).
-- **Run the orchestrator:** `uv run python orchestrator/run.py`.
-- **Everything at once:** `docker-compose up` (services + optional Postgres).
+- **Fire the pipeline:** `POST http://localhost:8083/dispatch` (or `/refresh` for the
+  laws→gaps→summary-email loop).
+- **Test:** offline suites per service (`uv run pytest`, network/Twilio mocked; use
+  `-m "not integration"` in extraction). Live CELLAR smoke test: `uv run pytest -m integration`.
+- **Lint / format:** `uv run ruff check .` · `uv run ruff format .`.
 - **Regenerate schemas from the models:** `uv run python contracts/export_schemas.py`.
-- **Lint / format / test:** `uv run ruff check .` · `uv run ruff format .` · `uv run pytest`.
-- **Contract validation (CI):** the Pydantic models are the source of truth, so service outputs are
-  valid by construction. CI re-runs `export_schemas.py` and **fails if the committed
-  `*.schema.json` files are out of date** — that's the early warning that an interface drifted.
+- **Contract validation:** the Pydantic models are the source of truth, so service outputs are
+  valid by construction. There is **no CI** in this repo — re-run `export_schemas.py` manually in
+  the same change whenever `contracts/models.py` changes, and keep the fixtures in sync.
 
 ---
 
-## 12. Working with IBM Bob
+## 12. Working with Claude Code + OpenSpec
 
-### 12.1 Modes & workflow
+Development uses **Claude Code** with the **OpenSpec** spec-driven workflow (config in
+`openspec/config.yaml`; commands in `.claude/commands/opsx/`, backed by `.claude/skills/`).
 
-- **Plan** mode first for any new service or non-trivial feature — review the plan before code.
-- **Orchestrator** mode for cross-service features that touch more than one part.
-- **Code / Agent** mode for day-to-day implementation.
-- **Ask** mode to explore the repo or a rule without modifying files.
-- **Advanced** mode when you need browser automation or MCP servers (e.g. live-fetching a portal).
-- Re-run **`/init`** after adding a service so this file stays accurate.
-- Keep tasks **small and focused**; don't dump the whole repo at Bob. Use **context mentions**:
-  `@/dataset/partners.json`, `@/contracts/models.py`, `@problems`, `@terminal`.
-- Use the **approval workflow** (approve edit/tool/subagent steps) to stay in control.
+### 12.1 The OpenSpec loop
 
-### 12.2 Suggested custom modes (`.bob/custom_modes.yaml`)
+- **`/opsx:explore`** — think through a problem or requirement before committing to a change.
+- **`/opsx:propose <idea>`** — create a change proposal under `openspec/changes/<name>/`
+  (proposal + design + delta specs + a task checklist) in one step. Review/edit it before building.
+- **`/opsx:apply`** — implement the tasks from the active change, checking them off as they land.
+- **`/opsx:archive`** — after implementation, merge the delta specs into `openspec/specs/` and
+  move the change to the archive.
+- **`/opsx:sync`** — sync delta specs into the main specs without archiving (for long-running changes).
 
-Optional per-part personas with tool restrictions, so each teammate's Bob "wakes up" knowing its
-service. Example slugs: `extraction` (read + terminal + MCP, scope to `extraction_service/`),
-`assessment` (read + edit, restrict edits to `\.py$`, scope to `assessment_service/`), `alerting`,
-`dashboard`. Commit the YAML so the whole team inherits them from Git. Each `roleDefinition` should
-say "You are a Python engineer working in FastAPI/Pydantic" so Bob defaults to the right stack.
+Use the loop for non-trivial features (new service, contract change, new pipeline stage); trivial
+fixes can go direct.
 
-### 12.3 Team rules (`.bob/rules/`)
+### 12.2 House rules (enforce in every change)
 
-Keep shared standards here (they load in every conversation): "never edit `dataset/`", "never
-change a Pydantic contract model without updating the generated schemas and the fixtures", "every
-finding cites a `source_url`", "secrets only via env", "prefer stdlib + the libraries in §11 — don't
-add heavy frameworks".
+- Never edit `dataset/` — it is fixed input.
+- Never change a contract model without regenerating the schemas (`export_schemas.py`) and
+  updating `contracts/fixtures/` in the same change.
+- Every finding cites a `source_url` — no source, no finding.
+- Secrets only via env; SMS/WhatsApp alerts only to our own test endpoints.
+- Prefer stdlib + the libraries already in the pyprojects — don't add heavy frameworks.
 
 ---
 

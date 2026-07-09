@@ -11,33 +11,38 @@ from pydantic import BaseModel, Field
 
 
 # ============================================================================
-# ENUMS (from taxonomy.json)
+# ENUMS — kept in sync with dataset/taxonomy.json (the authoritative
+# vocabulary). If taxonomy.json changes, update these Literals and re-run
+# export_schemas.py in the same change.
 # ============================================================================
 
 ProductCategory = Literal[
-    "led_lighting",
+    "audio",
     "battery_pack",
+    "camera",
+    "charging_equipment",
+    "computing",
+    "display",
+    "drone",
     "emobility_battery",
-    "toy_electronic",
+    "gaming",
+    "industrial_equipment",
+    "iot_sensor",
+    "led_lighting",
     "medical_wearable",
     "networking",
-    "drone",
-    "smart_home",
-    "audio_device",
-    "display",
-    "power_supply",
-    "sensor",
-    "controller",
-    "charger",
-    "cable",
-    "adapter",
-    "other_electronic",
+    "smartphone",
+    "toy_electronic",
+    "wearable",
 ]
 
 Substance = Literal[
     "lead",
     "cadmium",
     "mercury",
+    "chromium_vi",
+    "PBB",
+    "PBDE",
     "DEHP",
     "BPA",
     "decaBDE",
@@ -45,9 +50,6 @@ Substance = Literal[
     "MCCP",
     "PFAS_PFHxA",
     "dioxane",
-    "chromium_vi",
-    "phthalates",
-    "flame_retardants",
 ]
 
 RegulationFamily = Literal[
@@ -63,13 +65,16 @@ RegulationFamily = Literal[
     "mdr",
     "pops",
     "epr",
+    "epr_packaging",
     "energy_label",
-    "ecodesign",
-    "cbam",
-    "f_gas",
-    "eudr",
-    "food_contact",
-    "clp",
+    "emc",
+    "lvd",
+    "machinery",
+    "atex",
+    "chemical_safety",
+    "cybersecurity",
+    # Extraction-side fallback for live rules that map to no taxonomy family
+    # (normalize.map_family defaults unknown families here instead of guessing).
     "other",
 ]
 

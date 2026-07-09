@@ -1,74 +1,103 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://regulatory-radar.example.com/schemas/finding.schema.json",
-  "title": "Finding",
-  "description": "A compliance gap: a product against a requirement. Output of Part 2 (assessment service), input of Parts 3 & 4 (alerting, dashboard).",
-  "type": "object",
-  "properties": {
-    "company": {
-      "type": "string",
-      "description": "Partner company name"
-    },
-    "partner_id": {
-      "type": "string",
-      "description": "Partner ID (e.g., 'P001')"
-    },
-    "product_id": {
-      "type": "string",
-      "description": "Product ID (e.g., 'P001-A')"
-    },
-    "product": {
-      "type": "string",
-      "description": "Product name"
-    },
-    "regulation": {
-      "type": "string",
-      "description": "Human-readable regulation + article (e.g., 'EU Battery Regulation 2023/1542 — battery passport (Art. 77)')"
-    },
-    "requirement": {
-      "type": "string",
-      "description": "What the rule requires, in one sentence"
-    },
-    "source_url": {
-      "type": "string",
-      "description": "Live source URL (MANDATORY - proves rule came from live source)"
-    },
-    "gap": {
-      "type": "string",
-      "description": "Why this product is non-compliant today"
-    },
-    "deadline": {
-      "type": "string",
-      "format": "date",
-      "description": "Compliance deadline"
-    },
-    "severity": {
-      "type": "string",
-      "enum": ["low", "medium", "high"],
-      "description": "Severity level (low/medium/high)"
-    },
-    "recommended_action": {
-      "type": "string",
-      "description": "The fix"
-    },
-    "alert": {
-      "type": "object",
+  "$defs": {
+    "Alert": {
+      "description": "Alert details for a finding.",
       "properties": {
         "channel": {
-          "type": "string",
-          "enum": ["email", "sms", "whatsapp"],
-          "description": "Channel to send alert on (email/sms/whatsapp)"
+          "description": "Channel to send alert on (email/sms/whatsapp)",
+          "enum": [
+            "email",
+            "sms",
+            "whatsapp"
+          ],
+          "title": "Channel",
+          "type": "string"
         },
         "to": {
-          "type": "string",
-          "description": "Recipient (YOUR test number/email, NOT portfolio contact)"
+          "description": "Recipient (YOUR test number/email, NOT portfolio contact)",
+          "title": "To",
+          "type": "string"
         },
         "message": {
-          "type": "string",
-          "description": "Concise actionable message (< 300 chars for SMS)"
+          "description": "Concise actionable message (< 300 chars for SMS)",
+          "title": "Message",
+          "type": "string"
         }
       },
-      "required": ["channel", "to", "message"],
+      "required": [
+        "channel",
+        "to",
+        "message"
+      ],
+      "title": "Alert",
+      "type": "object"
+    }
+  },
+  "description": "A compliance gap: a product against a requirement.\n\nOutput of Part 2 (assessment service), input of Parts 3 & 4 (alerting, dashboard).",
+  "properties": {
+    "company": {
+      "description": "Partner company name",
+      "title": "Company",
+      "type": "string"
+    },
+    "partner_id": {
+      "description": "Partner ID (e.g., 'P001')",
+      "title": "Partner Id",
+      "type": "string"
+    },
+    "product_id": {
+      "description": "Product ID (e.g., 'P001-A')",
+      "title": "Product Id",
+      "type": "string"
+    },
+    "product": {
+      "description": "Product name",
+      "title": "Product",
+      "type": "string"
+    },
+    "regulation": {
+      "description": "Human-readable regulation + article (e.g., 'EU Battery Regulation 2023/1542 — battery passport (Art. 77)')",
+      "title": "Regulation",
+      "type": "string"
+    },
+    "requirement": {
+      "description": "What the rule requires, in one sentence",
+      "title": "Requirement",
+      "type": "string"
+    },
+    "source_url": {
+      "description": "Live source URL (MANDATORY - proves rule came from live source)",
+      "title": "Source Url",
+      "type": "string"
+    },
+    "gap": {
+      "description": "Why this product is non-compliant today",
+      "title": "Gap",
+      "type": "string"
+    },
+    "deadline": {
+      "description": "Compliance deadline",
+      "format": "date",
+      "title": "Deadline",
+      "type": "string"
+    },
+    "severity": {
+      "description": "Severity level (low/medium/high)",
+      "enum": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "title": "Severity",
+      "type": "string"
+    },
+    "recommended_action": {
+      "description": "The fix",
+      "title": "Recommended Action",
+      "type": "string"
+    },
+    "alert": {
+      "$ref": "#/$defs/Alert",
       "description": "Alert details (channel, recipient, message)"
     }
   },
@@ -85,5 +114,9 @@
     "severity",
     "recommended_action",
     "alert"
-  ]
+  ],
+  "title": "Finding",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://regulatory-radar.example.com/schemas/finding.schema.json"
 }

@@ -117,7 +117,7 @@
     "severity": "medium",
     "action_required": "Replace micro-USB ports with USB-C charging ports",
     "scope": {
-      "categories": ["audio_device", "networking", "smart_home"],
+      "categories": ["audio", "networking", "iot_sensor"],
       "substances": [],
       "markets": ["EU"],
       "conditions": "Applies to portable devices with rechargeable batteries"

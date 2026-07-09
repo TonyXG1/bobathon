@@ -1,140 +1,281 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://regulatory-radar.example.com/schemas/requirement.schema.json",
-  "title": "Requirement",
-  "description": "A regulatory requirement from a live source. Output of Part 1 (extraction service), input of Part 2 (assessment service).",
-  "type": "object",
-  "properties": {
-    "update_id": {
-      "type": "string",
-      "description": "Unique identifier for this requirement"
-    },
-    "published_date": {
-      "type": "string",
-      "format": "date",
-      "description": "When the requirement was published"
-    },
-    "source": {
-      "type": "string",
-      "description": "Source name (e.g., 'EUR-Lex', 'ECHA')"
-    },
-    "source_url": {
-      "type": "string",
-      "description": "Live portal URL where this requirement was read (MANDATORY)"
-    },
-    "celex": {
-      "type": ["string", "null"],
-      "description": "CELEX number (for EUR-Lex documents)"
-    },
-    "consolidation_date": {
-      "type": ["string", "null"],
-      "format": "date",
-      "description": "Consolidation date of the act"
-    },
-    "access_timestamp": {
-      "type": "string",
-      "format": "date-time",
-      "description": "When we fetched this requirement (UTC)"
-    },
-    "regulation_family": {
-      "type": "string",
-      "enum": [
-        "rohs", "reach", "weee", "battery", "ppwr", "gpsr", "red", "espr",
-        "toy_safety", "mdr", "pops", "epr", "energy_label", "ecodesign",
-        "cbam", "f_gas", "eudr", "food_contact", "clp", "other"
-      ],
-      "description": "Regulation family (from taxonomy.json)"
-    },
-    "reference": {
-      "type": ["string", "null"],
-      "description": "Legal reference (article/annex)"
-    },
-    "title": {
-      "type": "string",
-      "description": "Human-readable title"
-    },
-    "summary": {
-      "type": ["string", "null"],
-      "description": "Brief summary"
-    },
-    "change_type": {
-      "type": "string",
-      "enum": ["new", "amendment", "correction"],
-      "description": "Type of change (new/amendment/correction)"
-    },
-    "effective_date": {
-      "type": ["string", "null"],
-      "format": "date",
-      "description": "When the requirement becomes effective"
-    },
-    "deadline_date": {
-      "type": ["string", "null"],
-      "format": "date",
-      "description": "Compliance deadline"
-    },
-    "severity": {
-      "type": "string",
-      "enum": ["low", "medium", "high"],
-      "description": "Severity level (low/medium/high)"
-    },
-    "action_required": {
-      "type": ["string", "null"],
-      "description": "What action is required to comply"
-    },
-    "scope": {
-      "type": "object",
+  "$defs": {
+    "RequirementScope": {
+      "description": "Scope of a regulatory requirement.",
       "properties": {
         "categories": {
-          "oneOf": [
+          "anyOf": [
             {
-              "type": "array",
               "items": {
-                "type": "string",
                 "enum": [
-                  "led_lighting", "battery_pack", "emobility_battery", "toy_electronic",
-                  "medical_wearable", "networking", "drone", "smart_home", "audio_device",
-                  "display", "power_supply", "sensor", "controller", "charger", "cable",
-                  "adapter", "other_electronic"
-                ]
-              }
+                  "audio",
+                  "battery_pack",
+                  "camera",
+                  "charging_equipment",
+                  "computing",
+                  "display",
+                  "drone",
+                  "emobility_battery",
+                  "gaming",
+                  "industrial_equipment",
+                  "iot_sensor",
+                  "led_lighting",
+                  "medical_wearable",
+                  "networking",
+                  "smartphone",
+                  "toy_electronic",
+                  "wearable"
+                ],
+                "type": "string"
+              },
+              "type": "array"
             },
             {
-              "type": "string",
-              "enum": ["all"]
+              "const": "all",
+              "type": "string"
             }
           ],
-          "description": "Product categories in scope, or 'all' for all categories"
+          "description": "Product categories in scope, or 'all' for all categories",
+          "title": "Categories"
         },
         "substances": {
-          "type": "array",
+          "description": "Substances named in the requirement (empty if none)",
           "items": {
-            "type": "string",
             "enum": [
-              "lead", "cadmium", "mercury", "DEHP", "BPA", "decaBDE", "TBBPA",
-              "MCCP", "PFAS_PFHxA", "dioxane", "chromium_vi", "phthalates",
-              "flame_retardants"
-            ]
+              "lead",
+              "cadmium",
+              "mercury",
+              "chromium_vi",
+              "PBB",
+              "PBDE",
+              "DEHP",
+              "BPA",
+              "decaBDE",
+              "TBBPA",
+              "MCCP",
+              "PFAS_PFHxA",
+              "dioxane"
+            ],
+            "type": "string"
           },
-          "description": "Substances named in the requirement (empty if none)"
+          "title": "Substances",
+          "type": "array"
         },
         "markets": {
-          "type": "array",
+          "description": "Markets where requirement applies (ISO country codes, 'EU' = all 27 states)",
           "items": {
             "type": "string"
           },
-          "description": "Markets where requirement applies (ISO country codes, 'EU' = all 27 states)"
+          "title": "Markets",
+          "type": "array"
         },
         "conditions": {
-          "type": "string",
-          "description": "Free-text conditions and carve-outs (e.g., 'LMT and industrial batteries only')"
+          "default": "",
+          "description": "Free-text conditions and carve-outs (e.g., 'LMT and industrial batteries only')",
+          "title": "Conditions",
+          "type": "string"
         }
       },
-      "required": ["categories", "substances", "markets"],
+      "required": [
+        "categories",
+        "markets"
+      ],
+      "title": "RequirementScope",
+      "type": "object"
+    }
+  },
+  "description": "A regulatory requirement from a live source.\n\nOutput of Part 1 (extraction service), input of Part 2 (assessment service).",
+  "properties": {
+    "update_id": {
+      "description": "Unique identifier for this requirement",
+      "title": "Update Id",
+      "type": "string"
+    },
+    "published_date": {
+      "description": "When the requirement was published",
+      "format": "date",
+      "title": "Published Date",
+      "type": "string"
+    },
+    "source": {
+      "description": "Source name (e.g., 'EUR-Lex', 'ECHA')",
+      "title": "Source",
+      "type": "string"
+    },
+    "source_url": {
+      "description": "Live portal URL where this requirement was read (MANDATORY)",
+      "title": "Source Url",
+      "type": "string"
+    },
+    "celex": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "CELEX number (for EUR-Lex documents)",
+      "title": "Celex"
+    },
+    "consolidation_date": {
+      "anyOf": [
+        {
+          "format": "date",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Consolidation date of the act",
+      "title": "Consolidation Date"
+    },
+    "access_timestamp": {
+      "description": "When we fetched this requirement (UTC)",
+      "format": "date-time",
+      "title": "Access Timestamp",
+      "type": "string"
+    },
+    "regulation_family": {
+      "description": "Regulation family (from taxonomy.json)",
+      "enum": [
+        "rohs",
+        "reach",
+        "weee",
+        "battery",
+        "ppwr",
+        "gpsr",
+        "red",
+        "espr",
+        "toy_safety",
+        "mdr",
+        "pops",
+        "epr",
+        "epr_packaging",
+        "energy_label",
+        "emc",
+        "lvd",
+        "machinery",
+        "atex",
+        "chemical_safety",
+        "cybersecurity",
+        "other"
+      ],
+      "title": "Regulation Family",
+      "type": "string"
+    },
+    "reference": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Legal reference (article/annex)",
+      "title": "Reference"
+    },
+    "title": {
+      "description": "Human-readable title",
+      "title": "Title",
+      "type": "string"
+    },
+    "summary": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Brief summary",
+      "title": "Summary"
+    },
+    "change_type": {
+      "description": "Type of change (new/amendment/correction)",
+      "enum": [
+        "new",
+        "amendment",
+        "correction"
+      ],
+      "title": "Change Type",
+      "type": "string"
+    },
+    "effective_date": {
+      "anyOf": [
+        {
+          "format": "date",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "When the requirement becomes effective",
+      "title": "Effective Date"
+    },
+    "deadline_date": {
+      "anyOf": [
+        {
+          "format": "date",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Compliance deadline",
+      "title": "Deadline Date"
+    },
+    "severity": {
+      "description": "Severity level (low/medium/high)",
+      "enum": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "title": "Severity",
+      "type": "string"
+    },
+    "action_required": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "What action is required to comply",
+      "title": "Action Required"
+    },
+    "scope": {
+      "$ref": "#/$defs/RequirementScope",
       "description": "Scope of the requirement"
     },
     "corrects": {
-      "type": ["string", "null"],
-      "description": "If present, the update_id this entry duplicates/corrects (for de-duplication)"
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "If present, the update_id this entry duplicates/corrects (for de-duplication)",
+      "title": "Corrects"
     }
   },
   "required": [
@@ -148,5 +289,9 @@
     "change_type",
     "severity",
     "scope"
-  ]
+  ],
+  "title": "Requirement",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://regulatory-radar.example.com/schemas/requirement.schema.json"
 }

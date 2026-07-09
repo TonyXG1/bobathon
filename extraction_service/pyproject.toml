@@ -10,15 +10,12 @@ dependencies = [
     "httpx>=0.25.0",
     "pydantic>=2.5.0",
     "pydantic-settings>=2.1.0",
-    "defusedxml>=0.7.1",
-    "beautifulsoup4>=4.12.0",
-    "lxml>=4.9.0",
     "python-dotenv>=1.0.0",
 ]
 
-# Persistence uses the stdlib `sqlite3` driver; CELLAR SPARQL is queried over
-# plain httpx (Accept: application/sparql-results+json), so neither sqlalchemy
-# nor SPARQLWrapper is required at runtime.
+# CELLAR SPARQL is queried over plain httpx (Accept:
+# application/sparql-results+json), so SPARQLWrapper is not required.
+# When Formex-XML/ECHA parsing lands, add defusedxml + beautifulsoup4 + lxml.
 
 [project.optional-dependencies]
 test = [

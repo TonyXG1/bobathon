@@ -164,8 +164,8 @@ def normalize_update(
 ) -> Requirement:
     """Turn one raw scraped record into a validated :class:`Requirement`.
 
-    ``raw`` is expected to look like an entry from ``regulatory_updates.json``
-    (the documented shape of a rule). Provenance (``source_url`` and
+    ``raw`` is expected to look like a rule-update record (the ``Requirement``
+    field names, minus provenance). Provenance (``source_url`` and
     ``access_timestamp``) is mandatory and stamped here.
     """
     if not source_url:

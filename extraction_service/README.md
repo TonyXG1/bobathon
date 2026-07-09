@@ -48,13 +48,6 @@ python -m venv ../.venv && ../.venv/Scripts/python -m pip install -e .
 Visit http://localhost:8081/docs for interactive API documentation, then call
 `GET /requirements` to get live data. (First call takes ~8 s — it queries CELLAR.)
 
-## Running with Docker
-
-```bash
-docker build -t extraction-service .
-docker run -p 8081:8081 extraction-service
-```
-
 ## Testing
 
 ```bash

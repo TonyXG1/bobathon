@@ -23,6 +23,11 @@ log for the session (no database).
   (`Finding[]`). Supports `?limit=N` and `?only_channel=sms|whatsapp|email`.
 - `POST /dispatch` — full pipeline: fetch findings from the assessment service,
   then send. Same `limit` / `only_channel` options.
+- `POST /refresh` — one-button demo loop: re-fetch live laws (extraction),
+  re-assess (assessment), email a summary of the current gaps, and return the
+  refreshed findings. Optional `?to=` recipient (defaults to
+  `DEMO_RECIPIENT_EMAIL`).
+- `POST /test-email` — send ONE test email to verify real delivery.
 - `GET  /alerts/log` — delivery history (this session).
 - `GET  /alerts/log/{product_id}` — deliveries for one product.
 
@@ -53,6 +58,8 @@ Credentials are read from env only, never hardcoded or logged.
 | `TWILIO_TEST_NUMBER` | SMS/WhatsApp | OUR verified destination |
 | `TWILIO_TEST_EMAIL` | email | OUR destination |
 | `SENDGRID_API_KEY` | email | optional; without it, email is simulated |
+| `SENDGRID_FROM_EMAIL` | email | verified SendGrid sender identity ("from") |
+| `DEMO_RECIPIENT_EMAIL` | email | default recipient for `/refresh` and `/test-email` |
 | `TEST_MODE` | — | `true` forces dry-run even when fully configured |
 
 To send a **real SMS**: set `TWILIO_ACCOUNT_SID`, `TWILIO_PHONE_NUMBER`, and a

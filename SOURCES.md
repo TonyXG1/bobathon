@@ -4,11 +4,17 @@
 
 This document describes how to access live EU regulatory data from official portals. The extraction service must pull **current, in-force** rules from these sources, not from the bundled example dataset.
 
+> **Implementation status:** the extraction service currently implements **§1.1 only** — a CELLAR
+> SPARQL metadata query (English title + document date) per watchlist CELEX, run concurrently with
+> ≤ 5 connections (see `extraction_service/clients.py` and `extractor.py`). Formex XML retrieval
+> (§1.2), RSS change detection (§1.3), ECHA scraping (§2), and the conditional-GET/content-hash
+> strategies (§6) are documented here as the intended next steps but are **not built yet**.
+
 ---
 
 ## 🎯 Core Principle
 
-**Rules come from LIVE sources only.** The bundled `regulatory_updates.json` and `feed/*.html` are **EXAMPLES of the shape of a rule** — they teach you what to look for when scraping. They are **NOT an answer key and NOT a dataset to match against.**
+**Rules come from LIVE sources only.** There is no bundled rule set to match against — the `Requirement` model in `contracts/models.py` defines the shape a normalized rule must take.
 
 Every `Requirement` you persist must cite its `source_url` — the actual live portal URL where you read it.
 
@@ -379,14 +385,10 @@ requirement = Requirement(
 
 ---
 
-## 9. Testing with Bundled Examples
+## 9. Testing
 
-Before pointing at live sources, test your parsing logic with the bundled examples:
-
-- **`dataset/feed/*.html`** — 10 example HTML notices
-- **`dataset/regulatory_updates.json`** — 50 example rules (JSON shape)
-
-Use these to develop your HTML/XML parsers, then switch to live URLs.
+Parser and client tests live in `extraction_service/tests/`: the offline suite mocks the SPARQL
+transport, and `pytest -m integration` runs a live smoke test against the real CELLAR endpoint.
 
 ---
 
@@ -430,13 +432,12 @@ Use these to develop your HTML/XML parsers, then switch to live URLs.
 
 ## 12. Next Steps
 
-1. Implement CELLAR SPARQL client in `extraction_service/clients.py`
-2. Implement ECHA scraper in `extraction_service/clients.py`
-3. Implement normalization logic in `extraction_service/normalize.py`
-4. Implement change detection in `extraction_service/change.py`
-5. Test with bundled examples first
-6. Switch to live sources
-7. Validate provenance metadata on every `Requirement`
+1. ~~Implement CELLAR SPARQL client in `extraction_service/clients.py`~~ ✅ done (`CellarClient`)
+2. ~~Implement normalization logic in `extraction_service/normalize.py`~~ ✅ done (taxonomy alias maps + provenance stamping)
+3. Fetch Formex XML per act and parse the actual articles/annexes (today only title + date metadata is extracted; every requirement is emitted with scope `all`/EU)
+4. Implement the ECHA SVHC scraper in `extraction_service/clients.py`
+5. Add change detection (conditional GET, content hashing, RSS polling)
+6. Extract real `deadline_date`/`severity` per obligation instead of the engine's hardcoded per-rule defaults
 
 ---
 

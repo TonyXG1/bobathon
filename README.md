@@ -1,7 +1,7 @@
 # Regulatory Radar 🎯
 
-> **Automated EU regulatory compliance monitoring for electronics SMEs**  
-> IBM Bobathon · GenAI Builders Day · GDGoC TUM Campus Heilbronn  
+> **Automated EU regulatory compliance monitoring for electronics SMEs**
+> IBM Bobathon · GenAI Builders Day · GDGoC TUM Campus Heilbronn
 > Partner Challenge by **EcoComply** · Built with **IBM Bob** + **Twilio**
 
 ---
@@ -12,235 +12,170 @@ EU electronics SMEs face a flood of constantly changing product regulations (RoH
 
 ## 🏗️ Architecture
 
+Three small, **stateless** FastAPI services chained over REST, plus a shared contracts package. No database — every request works on live data.
+
 ```
-  FIND (Part 1)         UNDERSTAND          ASSESS (Part 2)        ALERT (Part 3)
-  extraction_service -> normalize       ->  assessment_service -> alerting_service
-  live sources          to schema           vs. portfolio          Twilio dispatch
-        |                                          |                      |
-        +------------- Requirement[] -------------+                      |
-                                                   +----- Finding[] -----+----> dashboard (Part 4)
+  FIND (Part 1)            ASSESS (Part 2)           ALERT (Part 3)
+  extraction_service  -->  assessment_service  -->   alerting_service
+  live EUR-Lex/CELLAR      vs. fixed portfolio       Twilio / SendGrid
+        |                        |                         |
+        +---- Requirement[] ----+------ Finding[] --------+
 ```
 
-### Four Services + Shared Contracts
+| Service | Port | Responsibility |
+|---------|------|----------------|
+| **extraction_service** | 8081 | Query the live CELLAR SPARQL endpoint for the ~11 watchlist acts and normalize each to a `Requirement` with real `source_url` provenance |
+| **assessment_service** | 8082 | Match requirements against `dataset/partners.json` with deterministic gap rules; emit `Finding[]` (currently 15 findings) |
+| **alerting_service** | 8083 | Send one alert per gap via Twilio SMS/WhatsApp or SendGrid email; simulates sends when credentials are missing |
 
-| Service | Port | Stack | Responsibility |
-|---------|------|-------|----------------|
-| **extraction_service** | 8081 | FastAPI + httpx | Pull & normalize current rules from CELLAR/ECHA |
-| **assessment_service** | 8082 | FastAPI | Match rules against portfolio; emit gaps |
-| **alerting_service** | 8083 | FastAPI + Twilio | Dispatch alerts via SMS/WhatsApp/Email |
-| **dashboard** | 8501 | Streamlit | Findings UI with sorting, filtering, audit trails |
-| **orchestrator** | 8080 | APScheduler | Schedule & chain the pipeline |
+**Two JSON contracts** decouple the stages — both are Pydantic v2 models in [contracts/models.py](contracts/models.py) (the single source of truth; JSON Schemas are generated from them):
 
-**Two JSON Contracts:**
-- **`Requirement`** (Part 1 → Part 2): One current obligation from a live source
-- **`Finding`** (Part 2 → Parts 3 & 4): One concrete gap (product × requirement)
+- **`Requirement`** (Part 1 → Part 2): one current obligation from a live source
+- **`Finding`** (Part 2 → Part 3): one concrete gap (product × requirement), including the alert to send
 
-Contracts are **Pydantic v2 models** in `contracts/models.py` — the single source of truth for validation and JSON schemas.
-
----
+> **Not implemented:** there is no dashboard service, and `orchestrator/` is an empty stub (only a `pyproject.toml`, no code). The Docker/database scaffolding from an earlier design has been removed — use [run_all.ps1](run_all.ps1) to start the services.
 
 ## 🚀 Quick Start
 
 ### Prerequisites
 - Python 3.12+
-- [uv](https://github.com/astral-sh/uv) (install: `pip install uv`)
-- Docker & Docker Compose (optional)
+- [uv](https://github.com/astral-sh/uv) (`pip install uv`)
 
-### 1. Clone & Install
-```bash
-git clone <repo-url>
-cd regulatory-radar
-uv sync
+### One command (Windows)
+
+```powershell
+.\run_all.ps1
 ```
 
-### 2. Configure Environment
+The script creates a shared `.venv`, installs the dependencies of all three services, starts them in dependency order (gating on each `/health`), and streams logs to `logs/`. It also copies `.env.example` → `.env` if missing.
+
+### Manual (any platform)
+
 ```bash
-cp .env.example .env
-# Edit .env with your Twilio credentials and other secrets
+cp .env.example .env          # optional: add Twilio/SendGrid credentials
+
+cd extraction_service && uv sync && uv run uvicorn main:app --port 8081
+cd assessment_service && uv sync && uv run uvicorn main:app --port 8082
+cd alerting_service   && uv sync && uv run uvicorn main:app --port 8083
 ```
 
-### 3. Run Services
+### Fire the whole pipeline
 
-**Option A: Individual Services**
 ```bash
-# Terminal 1 - Extraction Service
-cd extraction_service
-uv run uvicorn main:app --reload --port 8081
-
-# Terminal 2 - Assessment Service
-cd assessment_service
-uv run uvicorn main:app --reload --port 8082
-
-# Terminal 3 - Alerting Service
-cd alerting_service
-uv run uvicorn main:app --reload --port 8083
-
-# Terminal 4 - Dashboard
-cd dashboard
-uv run streamlit run app.py
+# extraction -> assessment -> alerting, one call:
+curl -X POST http://localhost:8083/dispatch
+# demo: send just one alert, SMS only:
+curl -X POST "http://localhost:8083/dispatch?limit=1&only_channel=sms"
+# one-button refresh: re-fetch live laws, re-assess, email a summary:
+curl -X POST http://localhost:8083/refresh
 ```
 
-**Option B: Docker Compose (All Services)**
-```bash
-docker-compose up
-```
+Interactive OpenAPI docs: [8081/docs](http://localhost:8081/docs) · [8082/docs](http://localhost:8082/docs) · [8083/docs](http://localhost:8083/docs)
 
-### 4. Access Services
-- **Extraction API:** http://localhost:8081/docs
-- **Assessment API:** http://localhost:8082/docs
-- **Alerting API:** http://localhost:8083/docs
-- **Dashboard:** http://localhost:8501
-
----
+Without Twilio/SendGrid credentials the alerting service **simulates** deliveries (`status: "simulated"` with the reason), so the pipeline works end-to-end out of the box. See [alerting_service/README.md](alerting_service/README.md) for the credential matrix.
 
 ## 📚 Documentation
 
-- **[AGENTS.md](./AGENTS.md)** — Complete project context (Bob reads this every session)
-- **[SOURCES.md](./SOURCES.md)** — Live data sources (EUR-Lex/CELLAR, ECHA)
-- **[DATASET_README.md](./DATASET_README.md)** — Data dictionary for bundled dataset
-- **[IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md)** — Scaffolding and structure plan
-- **[SETUP.md](./SETUP.md)** — Detailed setup and troubleshooting guide
-
----
+- **[CLAUDE.MD](./CLAUDE.MD)** — complete project context (loaded by the coding agent every session)
+- **[SOURCES.md](./SOURCES.md)** — live data sources guide (EUR-Lex/CELLAR, ECHA)
+- **[DATASET_README.md](./DATASET_README.md)** — data dictionary for the bundled dataset
+- Per-service READMEs: [extraction](extraction_service/README.md) · [assessment](assessment_service/README.md) · [alerting](alerting_service/README.md)
 
 ## 🛠️ Technology Stack
 
-**Backend Services:**
-- **FastAPI** — Modern, fast web framework with auto OpenAPI docs
-- **Pydantic v2** — Data validation and settings management
-- **httpx** — Async HTTP client for external APIs
-- **defusedxml** — Safe XML parsing (CELLAR Formex)
-- **BeautifulSoup** — HTML parsing (ECHA tables)
-- **Twilio SDK** — SMS/WhatsApp/Email delivery
-
-**Dashboard:**
-- **Streamlit** — Pure Python UI (no build step)
-- **pandas** — Data manipulation
-- **plotly** — Interactive charts
-
-**Database:**
-- **SQLite** (default) or **PostgreSQL** (via docker-compose)
-
-**Tooling:**
-- **uv** — Fast Python package manager
-- **ruff** — Linting and formatting
-- **pytest** — Testing framework
-
----
+- **FastAPI** + **uvicorn** — the three services (auto OpenAPI docs)
+- **Pydantic v2** + **pydantic-settings** — contracts and env-based config
+- **httpx** — outbound HTTP (SPARQL, service-to-service)
+- **Twilio SDK** / **SendGrid** — SMS/WhatsApp / email delivery
+- **uv**, **ruff**, **pytest** — tooling
 
 ## 📁 Repository Structure
 
 ```
-regulatory-radar/
-├── AGENTS.md                       # Project context for IBM Bob
-├── README.md                       # This file
-├── SOURCES.md                      # Live data sources guide
-├── DATASET_README.md               # Data dictionary
-├── IMPLEMENTATION_PLAN.md          # Scaffolding plan
-├── SETUP.md                        # Setup guide
-├── pyproject.toml                  # uv workspace + shared deps
-├── docker-compose.yml              # All services + Postgres
-├── .env.example                    # Secrets template
-├── .gitignore                      # Git exclusions
+bobathon/
+├── README.md                       # this file
+├── CLAUDE.MD                       # project context for the coding agent
+├── SOURCES.md                      # live data sources guide
+├── DATASET_README.md               # data dictionary
+├── run_all.ps1                     # start all three services (Windows)
+├── pyproject.toml                  # uv workspace + shared dev deps
+├── .env.example                    # secrets template (never commit .env)
 │
-├── .bob/                           # IBM Bob configuration
-│   ├── rules/                      # Team-wide standards
-│   ├── rules-code/                 # Mode-specific rules
-│   └── custom_modes.yaml           # Per-service personas
+├── contracts/                      # the SEAMS
+│   ├── models.py                   # Pydantic models: Requirement, Finding, Alert, enums
+│   ├── export_schemas.py           # regenerates the two *.schema.json files
+│   ├── requirement.schema.json     # generated from models.py
+│   ├── finding.schema.json         # generated from models.py
+│   └── fixtures/                   # sample Requirement[]/Finding[] test data
 │
 ├── dataset/                        # FIXED inputs (DO NOT EDIT)
-│   ├── partners.json               # Portfolio: 22 companies, 53 products
-│   ├── partners.csv                # Flattened portfolio
-│   ├── taxonomy.json               # Controlled vocabulary
-│   ├── regulatory_updates.json     # 50 EXAMPLE rules (shape only)
-│   ├── sample_expected_output.json # Finding shape
-│   └── feed/                       # Example HTML notices
+│   ├── partners.json               # portfolio: 22 companies, 53 products
+│   ├── taxonomy.json               # controlled vocabulary (authoritative enums)
+│   └── sample_expected_output.json # the shape of one Finding
 │
-├── contracts/                      # The SEAMS
-│   ├── models.py                   # Pydantic models (source of truth)
-│   ├── export_schemas.py           # Schema generator
-│   ├── requirement.schema.json     # Generated (CI-validated)
-│   ├── finding.schema.json         # Generated (CI-validated)
-│   └── fixtures/                   # Test data
+├── extraction_service/             # Part 1 — FastAPI, port 8081
+│   ├── main.py                     # GET /requirements, GET /requirements/{celex}
+│   ├── extractor.py                # watchlist + concurrent live fetch
+│   ├── clients.py                  # CellarClient (SPARQL over httpx)
+│   ├── normalize.py                # raw source → Requirement (taxonomy mapping)
+│   └── tests/                      # 22 offline + 1 live integration test
 │
-├── extraction_service/             # Part 1
-│   ├── main.py                     # FastAPI app
-│   ├── clients.py                  # CELLAR, ECHA clients
-│   ├── normalize.py                # Raw → Requirement
-│   ├── change.py                   # Change detection
-│   └── tests/
+├── assessment_service/             # Part 2 — FastAPI, port 8082
+│   ├── main.py                     # POST /assess, GET /findings
+│   ├── engine.py                   # 6 deterministic gap rules (the matcher)
+│   ├── portfolio.py                # portfolio loading, EU-market expansion
+│   └── tests/                      # 17 offline tests
 │
-├── assessment_service/             # Part 2
-│   ├── main.py                     # FastAPI app
-│   ├── engine.py                   # Scope matcher
-│   ├── portfolio.py                # Portfolio indexing
-│   └── tests/
+├── alerting_service/               # Part 3 — FastAPI, port 8083
+│   ├── main.py                     # POST /alerts, /dispatch, /refresh, /test-email, GET /alerts/log
+│   ├── channels.py                 # Twilio/SendGrid senders + dry-run simulation
+│   ├── templates.py                # message formatting (SMS < 300 chars)
+│   └── tests/                      # 19 offline tests
 │
-├── alerting_service/               # Part 3
-│   ├── main.py                     # FastAPI app
-│   ├── channels.py                 # SMS/WhatsApp/Email
-│   ├── templates.py                # Message formatting
-│   └── tests/
-│
-├── dashboard/                      # Part 4
-│   └── app.py                      # Streamlit app
-│
-└── orchestrator/                   # Pipeline scheduler
-    └── run.py                      # APScheduler job
+└── orchestrator/                   # stub — pyproject.toml only, no code
 ```
-
----
 
 ## 🧪 Testing
 
 ```bash
-# Run all tests
-uv run pytest
+# per service (offline — network and Twilio are mocked):
+cd extraction_service && uv run pytest -m "not integration"
+cd assessment_service && uv run pytest
+cd alerting_service   && uv run pytest
 
-# Run service-specific tests
-cd extraction_service
-uv run pytest
+# live smoke test against the real CELLAR endpoint:
+cd extraction_service && uv run pytest -m integration
 
-# Lint and format
+# lint / format:
 uv run ruff check .
 uv run ruff format .
 
-# Regenerate schemas from Pydantic models
-cd contracts
-uv run python export_schemas.py
+# regenerate JSON schemas after changing contracts/models.py:
+uv run python contracts/export_schemas.py
 ```
 
----
+The assessment engine tests run against the real `dataset/partners.json` and assert that the 5 seeded ground-truth gaps are found and the documented look-alikes are **not**.
 
 ## 🔐 Security
 
-- **XXE-safe XML parsing:** Use `defusedxml` for CELLAR Formex
-- **Secrets via env only:** Never hardcode credentials
-- **Defensive parsing:** Size limits, timeouts on all HTTP requests
-- **Polite client:** User-Agent, rate limits, conditional GET
-- **Test endpoints only:** Alerts go to OUR Twilio test number, not portfolio contacts
-
----
+- **Secrets via env only** — Twilio/SendGrid credentials load from `.env` via pydantic-settings; never hardcoded or logged
+- **Explicit timeouts** on every outbound HTTP request
+- **Polite client** — clear User-Agent with contact, ≤ 5 concurrent CELLAR connections
+- **Safe alerts** — SMS/WhatsApp go to OUR OWN Twilio test number; without credentials sends are simulated
 
 ## 📊 The Dataset
 
 ### Fixed Portfolio (DO NOT EDIT)
 - **22 companies, 53 products** in `dataset/partners.json`
-- **5 companies with seeded gaps** (ground truth for validation):
+- **5 companies with seeded gaps** (ground truth, re-derived by the engine):
   - **P006 FitTrack** — PFAS/PFHxA coating (REACH)
-  - **P008 PlayBright** — DEHP in toy, button-cell safety (GPSR)
-  - **P010 DisplayOne** — Mercury in CCFL panel (RoHS)
-  - **P013 RideVolt** — Missing battery passport (Battery Reg)
-  - **P022 KidVision** — Micro-USB connector, RED cybersecurity
+  - **P008 PlayBright** — DEHP in toy (Toy Safety), button-cell access (GPSR)
+  - **P010 DisplayOne** — mercury in CCFL panel (RoHS)
+  - **P013 RideVolt** — missing battery passport (Battery Reg)
+  - **P022 KidVision** — micro-USB connector (RED common charger)
 
 ### Taxonomy (Authoritative Enums)
-- **17 product categories** (e.g., `battery_pack`, `toy_electronic`, `emobility_battery`)
-- **13 substances** (e.g., `lead`, `DEHP`, `PFAS_PFHxA`)
-- **20 regulation families** (e.g., `rohs`, `reach`, `battery`, `gpsr`)
-
-All extracted data must map to these enums for deterministic matching.
-
----
+`dataset/taxonomy.json` defines 17 product categories, 13 substances, and 20 regulation families. All extracted data is normalized onto these keys for deterministic matching (unknown values are dropped or mapped to `"other"`, never invented).
 
 ## 🎯 Definition of Done
 
@@ -254,74 +189,28 @@ A correct **Core** slice on live data beats a flashy-but-wrong Stretch one.
 - **Real-world fit (10%)** — Actionable, auditable (provenance), correct deadline
 - **Demo & communication (10%)** — Show source, gap, alert; explain reasoning
 
----
+## 🐛 Troubleshooting
 
-## 🤝 Team Ownership
+**`/requirements` is slow (~8 s) or returns 502:**
+The EU SPARQL endpoint can be slow or briefly unavailable. Raise `HTTP_TIMEOUT` in `.env`, retry, and check connectivity to `publications.europa.eu`.
 
-**Suggested split:**
-- **Part 1 (Extraction) + Orchestrator** — You
-- **Part 2 (Assessment)** — Teammate (cleanest parallel complement)
-- **Parts 3 & 4 (Alerting + Dashboard)** — Shared float (alerting is demo-critical)
+**Twilio alerts show `"simulated"`:**
+That's the safe default. Set `TWILIO_ACCOUNT_SID`, `TWILIO_PHONE_NUMBER`, a verified `TWILIO_TEST_NUMBER` (and `SENDGRID_API_KEY` for email), then `TEST_MODE=false`.
 
----
+**`ModuleNotFoundError: No module named 'contracts'`:**
+Run the service from its own directory; each service's `config.py` bootstraps the repo root onto `sys.path`.
+
+**Port already in use:**
+```powershell
+Get-NetTCPConnection -LocalPort 8081 | Select-Object OwningProcess
+Stop-Process -Id <PID>
+```
 
 ## 🔗 Key Resources
 
 - **EUR-Lex SPARQL:** http://publications.europa.eu/webapi/rdf/sparql
 - **ECHA CHEM:** https://chem.echa.europa.eu/obligation-lists/candidateList
 - **Twilio Docs:** https://www.twilio.com/docs
-- **Twilio Promo Code:** `TUM-TWILIO-50` (hackathon credit)
-
----
-
-## 📝 Working with IBM Bob
-
-### Modes
-- **Plan** — Design before implementation
-- **Code/Agent** — Day-to-day coding
-- **Ask** — Explore without modifying
-- **Advanced** — Browser automation, MCP servers
-- **Orchestrator** — Cross-service features
-
-### Custom Modes
-See `.bob/custom_modes.yaml` for per-service personas:
-- `extraction` — Scoped to extraction_service/
-- `assessment` — Scoped to assessment_service/
-- `alerting` — Scoped to alerting_service/
-- `dashboard` — Scoped to dashboard/
-
-### Team Rules
-See `.bob/rules/` for shared standards:
-- Never edit `dataset/`
-- Contract changes require schema regeneration
-- Every finding cites `source_url`
-- Secrets only via env
-
----
-
-## 🐛 Troubleshooting
-
-**Services can't connect to database:**
-- Check `DATABASE_URL` in `.env`
-
-**Twilio alerts failing:**
-- Verify `TWILIO_ACCOUNT_SID` and `TWILIO_AUTH_TOKEN` in `.env`
-- Ensure test number is verified in Twilio console
-
-**CELLAR SPARQL timeout:**
-- Reduce query size, add `LIMIT`/`OFFSET`
-- Keep < 5 concurrent connections
-
-**Import errors between services:**
-- Run `uv sync` in each service directory
-
----
-
-## 📄 License
-
-[Add your license here]
-
----
 
 ## 🙏 Acknowledgments
 
