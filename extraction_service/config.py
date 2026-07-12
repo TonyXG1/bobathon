@@ -37,6 +37,10 @@ class Settings(BaseSettings):
     # EUR-Lex / CELLAR
     cellar_sparql_endpoint: str = "http://publications.europa.eu/webapi/rdf/sparql"
 
+    # Obligation store (optional). When unset/unreachable the service keeps the
+    # old stateless behavior: fetch live and serve without persisting.
+    database_url: str | None = None
+
     # Politeness / limits
     http_timeout: float = 60.0
     contact_email: str = "contact@example.com"

@@ -154,9 +154,7 @@ def _summary_message(requirements: list[dict], findings: list[Finding]) -> str:
 
 @app.post("/test-email")
 def test_email(
-    to: str | None = Query(
-        default=None, description="Recipient; defaults to the demo address."
-    ),
+    to: str | None = Query(default=None, description="Recipient; defaults to the demo address."),
 ) -> dict:
     """Send ONE test email so the frontend can verify real delivery with a click."""
     settings = get_settings()

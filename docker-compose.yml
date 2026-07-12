@@ -1,0 +1,28 @@
+# Regulatory Radar — infrastructure only.
+# The three FastAPI services run on the host via run_all.ps1; this compose file
+# provides the single PostgreSQL instance (pgvector-enabled) they persist to.
+#
+#   docker compose up -d db
+#   uv run alembic -c storage/alembic.ini upgrade head
+#
+# Credentials match the default DATABASE_URL in .env.example.
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: regulatory-radar-db
+    environment:
+      POSTGRES_USER: radar
+      POSTGRES_PASSWORD: radar
+      POSTGRES_DB: radar
+    ports:
+      - "5432:5432"
+    volumes:
+      - radar-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U radar -d radar"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+volumes:
+  radar-pgdata:

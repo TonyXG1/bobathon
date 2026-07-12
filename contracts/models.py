@@ -9,7 +9,6 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-
 # ============================================================================
 # ENUMS — kept in sync with dataset/taxonomy.json (the authoritative
 # vocabulary). If taxonomy.json changes, update these Literals and re-run
@@ -112,7 +111,7 @@ class RequirementScope(BaseModel):
 class Requirement(BaseModel):
     """
     A regulatory requirement from a live source.
-    
+
     Output of Part 1 (extraction service), input of Part 2 (assessment service).
     """
 
@@ -125,23 +124,17 @@ class Requirement(BaseModel):
     source_url: str = Field(
         description="Live portal URL where this requirement was read (MANDATORY)"
     )
-    celex: str | None = Field(
-        default=None, description="CELEX number (for EUR-Lex documents)"
-    )
+    celex: str | None = Field(default=None, description="CELEX number (for EUR-Lex documents)")
     consolidation_date: date | None = Field(
         default=None, description="Consolidation date of the act"
     )
-    access_timestamp: datetime = Field(
-        description="When we fetched this requirement (UTC)"
-    )
+    access_timestamp: datetime = Field(description="When we fetched this requirement (UTC)")
 
     # Classification
     regulation_family: RegulationFamily = Field(
         description="Regulation family (from taxonomy.json)"
     )
-    reference: str | None = Field(
-        default=None, description="Legal reference (article/annex)"
-    )
+    reference: str | None = Field(default=None, description="Legal reference (article/annex)")
 
     # Content
     title: str = Field(description="Human-readable title")
@@ -152,9 +145,7 @@ class Requirement(BaseModel):
     effective_date: date | None = Field(
         default=None, description="When the requirement becomes effective"
     )
-    deadline_date: date | None = Field(
-        default=None, description="Compliance deadline"
-    )
+    deadline_date: date | None = Field(default=None, description="Compliance deadline")
 
     # Impact
     severity: Severity = Field(description="Severity level (low/medium/high)")
@@ -184,18 +175,14 @@ class Alert(BaseModel):
     """Alert details for a finding."""
 
     channel: Channel = Field(description="Channel to send alert on (email/sms/whatsapp)")
-    to: str = Field(
-        description="Recipient (YOUR test number/email, NOT portfolio contact)"
-    )
-    message: str = Field(
-        description="Concise actionable message (< 300 chars for SMS)"
-    )
+    to: str = Field(description="Recipient (YOUR test number/email, NOT portfolio contact)")
+    message: str = Field(description="Concise actionable message (< 300 chars for SMS)")
 
 
 class Finding(BaseModel):
     """
     A compliance gap: a product against a requirement.
-    
+
     Output of Part 2 (assessment service), input of Parts 3 & 4 (alerting, dashboard).
     """
 

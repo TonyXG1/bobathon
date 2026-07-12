@@ -1,0 +1,17 @@
+[project]
+name = "storage"
+version = "0.1.0"
+description = "Shared PostgreSQL storage layer (obligation store, finding audit, pgvector triage)"
+requires-python = ">=3.12"
+
+dependencies = [
+    "sqlalchemy>=2.0",
+    "asyncpg>=0.29.0",
+    "alembic>=1.13.0",
+    "pgvector>=0.2.5",
+    "pydantic>=2.5.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

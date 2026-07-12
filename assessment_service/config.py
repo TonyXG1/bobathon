@@ -41,6 +41,11 @@ class Settings(BaseSettings):
     extraction_service_url: str = "http://localhost:8081"
     http_timeout: float = 120.0
 
+    # Obligation store (optional). When set, requirements are read from the
+    # database instead of the extraction HTTP API, and findings are persisted
+    # for audit; when unset/unreachable the HTTP path above is used.
+    database_url: str | None = None
+
     # Alert recipients — OUR OWN test endpoints (never a portfolio contact).
     twilio_test_number: str = "+10000000000"
     twilio_test_email: str = "alerts-test@example.com"

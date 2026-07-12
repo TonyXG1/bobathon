@@ -101,22 +101,37 @@ Non-trivial changes go through the OpenSpec flow (`/opsx:propose` → `/opsx:app
 
 ---
 
-## 3. Architecture — three services + shared contracts (stateless, no database)
+## 3. Architecture — three services + shared contracts + one optional Postgres
 
 Each part is a **separate, independently runnable FastAPI app** (Pydantic in, Pydantic out, auto
-OpenAPI docs at `/docs`). Services talk over REST (`httpx`). **There is no database** — this is a
-simplified stateless build: every request works on live data, and the alerting service keeps its
-delivery log in memory for the session.
+OpenAPI docs at `/docs`). Services talk over REST (`httpx`). Persistence is **one PostgreSQL
+database** (pgvector-enabled image, `docker-compose.yml`, migrations via Alembic in `storage/`)
+holding three logical layers with strict roles:
+
+1. **Relational obligation store** (`obligations` table) — the system of record and the ONLY
+   input to the assessment matcher. Extraction upserts fetched rules by content hash (unchanged =
+   no-op, changed = supersede via `supersedes_id`/`valid_to`, never overwrite).
+2. **pgvector triage index** (`obligation_embeddings`) — similarity for search/routing/human
+   triage ONLY (`storage/similarity.py`, `GET /requirements/{celex}/similar`). It must never
+   influence findings: deleting it leaves results byte-identical (tests enforce this, including
+   an import-graph guard — the decision path never imports `storage.similarity`).
+3. **Lineage** — amendments/supersession as self-referencing FKs + recursive CTEs inside
+   `storage/repository.py`. No graph database.
+
+Findings are persisted to the `findings` table for audit (rule that fired + source URL).
+The database is **optional**: without a reachable `DATABASE_URL` every service degrades to the
+previous stateless behavior (extraction serves live-only, assessment fetches over HTTP, the
+alerting delivery log stays in memory).
 
 | Service | Part | Stack | Port | Responsibility | Reads | Emits |
 |---|---|---|---|---|---|---|
-| `extraction_service` | 1 | FastAPI + httpx | 8081 | Query the live CELLAR SPARQL endpoint for the ~11 watchlist acts; normalize with provenance | live CELLAR | `Requirement[]` (HTTP response) |
-| `assessment_service` | 2 | FastAPI | 8082 | Deterministic gap rules against the portfolio | extraction API, `dataset/partners.json` | `Finding[]` (HTTP response) |
+| `extraction_service` | 1 | FastAPI + httpx | 8081 | Query the live CELLAR SPARQL endpoint for the ~11 watchlist acts; normalize with provenance; upsert into the obligation store | live CELLAR, obligation store | `Requirement[]` (HTTP response) + obligation rows |
+| `assessment_service` | 2 | FastAPI | 8082 | Deterministic gap rules against the portfolio | obligation store (fallback: extraction API), `dataset/partners.json` | `Finding[]` (HTTP response) + audit rows |
 | `alerting_service` | 3 | FastAPI + twilio/sendgrid | 8083 | One alert per gap on `preferred_channel`; simulates when credentials missing | assessment API | deliveries + in-memory `ALERTS_LOG` |
 
 **Not implemented:** the Part-4 dashboard was never built, and `orchestrator/` is an empty stub
-(only a `pyproject.toml`, no code). The Docker/database scaffolding from the earlier
-database-backed design has been removed — use `run_all.ps1` to start everything.
+(only a `pyproject.toml`, no code). Start everything with `run_all.ps1` (add `-WithDb` to also
+start Postgres via `docker compose up -d db` and apply the Alembic migrations).
 
 **Why separate services:** the two contracts are clean process boundaries. Once the Pydantic models
 (and their exported schemas) are frozen, each teammate builds and tests their service against
@@ -134,7 +149,8 @@ bobathon/
 ├── README.md                       # the challenge brief + quick start
 ├── SOURCES.md                      # where to get CURRENT rules (start here for Part 1)
 ├── DATASET_README.md               # data dictionary (mirrored in §5 below)
-├── run_all.ps1                     # start all three services in order (Windows)
+├── run_all.ps1                     # start all three services in order (Windows); -WithDb adds Postgres
+├── docker-compose.yml              # infrastructure only: the pgvector-enabled Postgres (db service)
 ├── pyproject.toml                  # uv workspace + shared dev deps (ruff, pytest)
 ├── .env.example                    # template for secrets (never commit the real .env)
 │
@@ -147,6 +163,15 @@ bobathon/
 │   ├── partners.json               # the portfolio: 22 companies, 53 products
 │   ├── taxonomy.json               # controlled vocabulary (the authoritative enums)
 │   └── sample_expected_output.json # the shape of one Finding (gap + source + alert)
+│
+├── storage/                        # shared Postgres layer (imported like contracts/ via sys.path)
+│   ├── orm.py                      # SQLAlchemy 2.0 models: obligations, findings, obligation_embeddings
+│   ├── repository.py               # decision-path data access: upsert-by-hash, in-force set, lineage CTE, audit
+│   ├── similarity.py               # TRIAGE ONLY — pgvector search; never imported by the decision path
+│   ├── hashing.py                  # canonical Requirement content hash (excludes access_timestamp)
+│   ├── db.py                       # lazy async engine/session (asyncpg) from DATABASE_URL
+│   ├── alembic.ini · migrations/   # schema migrations (no ad-hoc init.sql)
+│   └── tests/                      # `-m db` suite (auto-skips without a reachable DB) + parity/import-graph guards
 │
 ├── contracts/                      # the SEAMS — single source of truth for both interfaces
 │   ├── models.py                   # Pydantic models: Requirement, Finding, Alert, enums
@@ -418,12 +443,18 @@ already ship CORS middleware (`CORS_ORIGINS` env var) so a browser frontend can 
 - **Tooling:** **`uv`** for envs/deps (fast), **`ruff`** for lint+format, **`pytest`** for tests.
 - **Everything at once (Windows):** `.\run_all.ps1` — builds one shared `.venv`, installs all
   service deps, starts the three services in dependency order gated on `/health`, logs to `logs/`.
+  Add **`-WithDb`** to also start Postgres (`docker compose up -d db`) and apply migrations.
+- **Database only:** `docker compose up -d db`, then
+  `.venv\Scripts\python -m alembic -c storage/alembic.ini upgrade head`. `DATABASE_URL` lives in
+  `.env` (see `.env.example`); unset it to run fully stateless.
 - **Run one service:** `uv run uvicorn main:app --reload --port 8081` (from the service dir).
   Repeat with 8082 / 8083 for assessment / alerting. OpenAPI docs at `http://localhost:<port>/docs`.
 - **Fire the pipeline:** `POST http://localhost:8083/dispatch` (or `/refresh` for the
   laws→gaps→summary-email loop).
 - **Test:** offline suites per service (`uv run pytest`, network/Twilio mocked; use
   `-m "not integration"` in extraction). Live CELLAR smoke test: `uv run pytest -m integration`.
+  Database suite (needs the compose `db` up): `uv run pytest -m db` from `storage/` — it
+  auto-skips when `DATABASE_URL` is unset/unreachable.
 - **Lint / format:** `uv run ruff check .` · `uv run ruff format .`.
 - **Regenerate schemas from the models:** `uv run python contracts/export_schemas.py`.
 - **Contract validation:** the Pydantic models are the source of truth, so service outputs are

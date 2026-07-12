@@ -1,9 +1,13 @@
 # Extraction Service (Part 1)
 
 Pulls current EU regulatory requirements **live** from EUR-Lex / CELLAR and
-normalizes them to the `Requirement` schema. **Simplified, no-database build:**
-every request queries the live SPARQL endpoint and returns results directly — no
-persistence, no extraction job to trigger.
+normalizes them to the `Requirement` schema. Every request queries the live
+SPARQL endpoint; when `DATABASE_URL` is configured the results are also
+**upserted into the shared obligation store** (`storage/`, one Postgres) — by
+content hash, so unchanged rules are no-ops and changed rules supersede rather
+than overwrite — and `GET /requirements` serves the in-force set from the
+store, which also bridges live outages. Without a database the service runs
+in the old stateless mode.
 
 ## How it works
 
@@ -15,9 +19,13 @@ to the watchlist run concurrently (≤ 5 connections, to stay a polite client).
 
 ## API Endpoints
 
-- `GET /requirements` — live list of watchlist requirements.
+- `GET /requirements` — live list of watchlist requirements (persisted and
+  served from the obligation store when configured).
   Optional repeatable filter: `?family=battery&family=reach`.
 - `GET /requirements/{celex}` — one requirement by CELEX (e.g. `32023R1542`).
+- `GET /requirements/{celex}/similar` — **triage only**: stored obligations
+  semantically near this one (pgvector). Never part of the decision path;
+  503 without a database.
 - `GET /health` — health check.
 
 ## Key Files
@@ -60,6 +68,7 @@ uv run pytest -m integration
 ## Environment Variables (all optional)
 
 - `CELLAR_SPARQL_ENDPOINT` — SPARQL endpoint (default: the public CELLAR endpoint)
+- `DATABASE_URL` — the obligation store (default: unset → stateless mode)
 - `HTTP_TIMEOUT` — request timeout in seconds (default: 60)
 - `CONTACT_EMAIL` — used in the polite `User-Agent` (default: `contact@example.com`)
 - `LOG_LEVEL` — logging level (default: INFO)

@@ -19,7 +19,14 @@
 .NOTES
     Run from anywhere; the script cd's to its own folder (the repo root).
     Twilio is optional - with no credentials the alerting service simulates sends.
+
+    -WithDb additionally starts the pgvector-enabled Postgres from
+    docker-compose.yml, waits for it to become healthy, and applies the Alembic
+    migrations before starting the services (needs Docker). Without it the
+    services run in the stateless fallback mode (no persistence, no audit).
 #>
+
+param([switch]$WithDb)
 
 $ErrorActionPreference = "Stop"
 
@@ -92,10 +99,33 @@ try {
         -r (Join-Path $Root "extraction_service\pyproject.toml") `
         -r (Join-Path $Root "assessment_service\pyproject.toml") `
         -r (Join-Path $Root "alerting_service\pyproject.toml") `
-        -r (Join-Path $Root "contracts\pyproject.toml")
+        -r (Join-Path $Root "contracts\pyproject.toml") `
+        -r (Join-Path $Root "storage\pyproject.toml")
     if ($LASTEXITCODE -ne 0) { throw "dependency install failed (exit $LASTEXITCODE)" }
 
     if (-not (Test-Path $Py)) { throw "Expected venv python not found at $Py" }
+
+    # --- 2b. optional: obligation store (Postgres + pgvector) --------------
+    if ($WithDb) {
+        Write-Host "Starting Postgres (docker compose up -d db)..." -ForegroundColor Cyan
+        & docker compose up -d db
+        if ($LASTEXITCODE -ne 0) { throw "docker compose up failed (exit $LASTEXITCODE)" }
+
+        Write-Host "Waiting for the database to become healthy..." -ForegroundColor Cyan
+        $deadline = (Get-Date).AddSeconds(90)
+        $healthy = $false
+        while ((Get-Date) -lt $deadline) {
+            $state = (& docker inspect --format "{{.State.Health.Status}}" regulatory-radar-db 2>$null)
+            if ($state -eq "healthy") { $healthy = $true; break }
+            Start-Sleep -Seconds 2
+        }
+        if (-not $healthy) { throw "Postgres did not become healthy within 90 s" }
+        Write-Host "  [db] healthy" -ForegroundColor Green
+
+        Write-Host "Applying migrations (alembic upgrade head)..." -ForegroundColor Cyan
+        & $Py -m alembic -c (Join-Path $Root "storage\alembic.ini") upgrade head
+        if ($LASTEXITCODE -ne 0) { throw "alembic upgrade failed (exit $LASTEXITCODE)" }
+    }
 
     # --- 3. start each service in order, gating on /health -----------------
     foreach ($svc in $Services) {

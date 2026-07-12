@@ -8,14 +8,14 @@ This package defines the two core contracts:
 
 from contracts.models import (
     Alert,
-    Finding,
-    Requirement,
     ChangeType,
-    Severity,
     Channel,
+    Finding,
     ProductCategory,
-    Substance,
     RegulationFamily,
+    Requirement,
+    Severity,
+    Substance,
 )
 
 __all__ = [

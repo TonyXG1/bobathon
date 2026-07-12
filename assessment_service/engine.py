@@ -191,9 +191,7 @@ def _build_finding(
         recommended_action=rule.recommended_action,
         alert=Alert(
             channel=channel,
-            to=_alert_recipient(
-                channel, partner, test_number=test_number, test_email=test_email
-            ),
+            to=_alert_recipient(channel, partner, test_number=test_number, test_email=test_email),
             message=message,
         ),
     )

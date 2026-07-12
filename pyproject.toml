@@ -12,6 +12,7 @@ members = [
     "assessment_service",
     "alerting_service",
     "contracts",
+    "storage",
     "orchestrator"
 ]
 
@@ -73,6 +74,7 @@ markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks tests as integration tests",
     "unit: marks tests as unit tests",
+    "db: needs a reachable Postgres (DATABASE_URL); auto-skipped otherwise",
 ]
 
 [tool.coverage.run]
